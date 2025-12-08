@@ -26,7 +26,7 @@ This chart is used to set up the Ansible Automation Platform Operator version 2.
 | aapManifest.key | string | `"secret/data/hub/aap-manifest"` |  |
 | configJob.activeDeadlineSeconds | int | `3600` |  |
 | configJob.configTimeout | int | `1800` |  |
-| configJob.image | string | `"quay.io/validatedpatterns/vp-laas-config-container:latest"` |  |
+| configJob.image | string | `"quay.io/validatedpatterns/vp-ocaas-config-container:latest"` |  |
 | configJob.imagePullPolicy | string | `"Always"` |  |
 | configJob.schedule | string | `"10 */2 * * *"` |  |
 | global.repoURL | string | `"test"` |  |

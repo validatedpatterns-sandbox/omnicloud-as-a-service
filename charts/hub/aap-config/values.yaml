@@ -16,7 +16,7 @@ aap:
   lightspeed_disabled: true
 
 configJob:
-  image: quay.io/validatedpatterns/vp-laas-config-container:latest
+  image: quay.io/validatedpatterns/vp-ocaas-config-container:latest
   schedule: "10 */2 * * *"
   activeDeadlineSeconds: 3600
   imagePullPolicy: Always

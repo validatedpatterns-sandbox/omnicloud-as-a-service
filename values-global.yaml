@@ -1,6 +1,6 @@
 ---
 global:
-  pattern: lab-as-a-service
+  pattern: omnicloud-as-a-service
   options:
     useCSV: false
     syncPolicy: Automatic

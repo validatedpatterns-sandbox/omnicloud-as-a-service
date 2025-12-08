@@ -2,14 +2,14 @@
 apiVersion: "tower.ansible.com/v1alpha1"
 kind: JobTemplate
 metadata:
-  name: laas-template
+  name: ocaas-template
   namespace: ansible-automation-platform
 spec:
-  name: laas-job
+  name: ocaas-job
   connection_secret: aap-login-token
   inventory: base-inventory
-  description: laas job template
-  project: laas-project
+  description: ocaas job template
+  project: ocaas-project
   playbook: 'ansible/clusterdeploy/tasks/main.yml'
   organization: Default
   #credentials:

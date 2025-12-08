@@ -1,7 +1,7 @@
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
 
-ARG TITLE="lab-as-a-service-container"
-ARG DESCRIPTION="LaaS - Laab as a Service - Container"
+ARG TITLE="omnicloud-as-a-service-container"
+ARG DESCRIPTION="OCaaS - OmniCloud as a Service - Container"
 ARG MAINTAINER="Validated Patterns <team-validated-patterns@redhat.com>"
 # https://spdx.org/licenses/
 ARG LICENSE="Apache-2.0"

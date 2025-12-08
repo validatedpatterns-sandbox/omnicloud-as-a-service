@@ -1,4 +1,4 @@
-NAME ?= vp-laas-config-container
+NAME ?= vp-ocaas-config-container
 TAG ?= latest
 CONTAINER ?= $(NAME):$(TAG)
 

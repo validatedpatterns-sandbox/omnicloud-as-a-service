@@ -1,7 +1,7 @@
 # Define the cluster's high-level state regardless of the cloud.
 cluster:
   name: "{{ cluster_name_input }}"
-  clusterGroup: "{{ cluster_clusterGroup_input }}" devops # clusterGroup for application deployment to provisioned clusters
+  clusterGroup: "{{ cluster_clusterGroup_input }}" # clusterGroup for application deployment to provisioned clusters
   version: img4.19.9-x86-64-appsub # oc get clusterimageset
   baseDomain: "{{ cluster_baseDomain_input }}"
 

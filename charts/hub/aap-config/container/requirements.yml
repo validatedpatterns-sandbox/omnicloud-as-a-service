@@ -3,4 +3,5 @@
 collections:
   - name: community.general
   - name: kubernetes.core
+  - name: awx.awx
   - name: git+https://github.com/ansible/ansible.platform,stable-2.5

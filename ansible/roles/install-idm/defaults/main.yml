@@ -1,0 +1,47 @@
+---
+# defaults file for install-idm
+
+# IDM Configuration
+ipa_zone: "aws.validatedpatterns.io"
+ipa_pw: "R3dH4t1!"
+
+# IDM Server Configuration
+ipaserver_hostname: "{{ fqdn_nodot | default(ansible_fqdn) }}"
+ipaserver_no_host_dns: true
+ipaserver_setup_dns: false
+ipaserver_setup_adtrust: false
+ipaserver_setup_kra: false
+ipaserver_netbios_name: "VPLAB"
+ipaserver_domain: "{{ ipa_zone }}"
+ipaserver_realm: "{{ ipa_zone | upper }}"
+ipaadmin_password: "{{ ipa_pw }}"
+ipadm_password: "{{ ipa_pw }}"
+
+# Packages to install
+idm_packages:
+  - vim
+  - git
+  - ipa-server
+  - firewalld
+
+# Firewalld rules to add
+idm_firewalld_rules:
+  - port: "22/tcp"
+  - port: "80/tcp"
+  - port: "443/tcp"
+  - port: "464/tcp"
+  - port: "389/tcp"
+  - port: "636/tcp"
+  - port: "88/tcp"
+  - port: "88/udp"
+
+# Users to create in IDM
+# Can be overridden with idm.users structure
+idm_users: "{{ idm.users | default([]) }}"
+
+# Ansible collections to install on target node
+idm_target_collections:
+  - name: freeipa.ansible_freeipa
+  - name: ansible.posix
+install_collections_on_target: true  # Set to false to skip collection installation on target
+

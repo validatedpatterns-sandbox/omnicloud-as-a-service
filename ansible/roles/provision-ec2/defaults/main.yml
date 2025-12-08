@@ -1,0 +1,41 @@
+---
+# defaults file for provision-ec2
+
+# AWS Configuration
+aws_region: "us-east-1"
+key_name: "my-ssh-key"
+ssh_public_key_path: "~/.ssh/id_rsa.pub"
+vpc_security_group_name: "bastion-sg"
+allow_cidrs: "0.0.0.0/0"
+
+# RHEL AMI Configuration
+rhel_ami_owner: "309956199498"  # Red Hat account ID
+
+# Instance defaults
+instance_type: "t3.medium"
+instance_ebs_size: 20
+wait_for_ssh_timeout: 600
+
+# EC2 Tags defaults
+ec2_tags: "omnicloud"
+ec2_role: "bastion"
+
+# Instance lists - define these in group_vars or vars
+# Each list should contain dictionaries with instance configuration
+ec2_instances_idm: []
+ec2_instances_aap: []
+ec2_instances_satellite: []
+
+# Combined list of all instances to provision
+# This will be built from the above lists
+ec2_instances_all: []
+
+# Route53 DNS Configuration
+hosted_zone: ""  # Set this to your Route53 hosted zone (e.g., "example.com.")
+create_dns_records: true  # Set to false to skip DNS record creation
+
+# Destroy/Delete Configuration
+destroy: false  # Set to true to delete all provisioned resources
+delete_security_group: false  # Set to true to delete security group on destroy
+delete_ssh_key: false  # Set to true to delete SSH key on destroy
+

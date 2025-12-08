@@ -1,0 +1,16 @@
+---
+collections:
+  # Option 1: Use community FreeIPA collection (available on Galaxy)
+  - name: freeipa.ansible_freeipa
+  - name: ansible.posix
+  - name: amazon.aws
+  - name: community.aws
+  
+  # Option 2: If you have Red Hat subscription, use redhat.ipa from Automation Hub
+  # You'll need to configure ansible.cfg with:
+  # [galaxy]
+  # server_list = automation_hub, galaxy
+  # And authenticate with: ansible-galaxy login --github-token or --token
+  # - name: redhat.ipa
+  #   source: https://cloud.redhat.com/api/automation-hub/
+

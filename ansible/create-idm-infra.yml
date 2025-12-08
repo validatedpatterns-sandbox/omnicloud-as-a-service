@@ -1,0 +1,24 @@
+---
+- name: Provision EC2 Instances
+  hosts: localhost
+  gather_facts: false
+  collections:
+    - amazon.aws
+    - community.aws
+  vars_files:
+    - idm-vars.yml
+  roles:
+    - provision-ec2
+
+- name: Install IDM on provisioned instances
+  hosts: idm_servers
+  become: true
+  gather_facts: true
+  collections:
+    - freeipa.ansible_freeipa
+    - ansible.posix
+  vars_files:
+    - idm-vars.yml
+  roles:
+    - install-idm
+

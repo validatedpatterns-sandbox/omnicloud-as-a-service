@@ -1,4 +1,4 @@
-# LaaS config container
+# OCaaS config container
 
 This is a small container to run a couple of tasks in a job to initialized AAP
 inside openshift.
@@ -8,5 +8,5 @@ inside openshift.
 ### Pull the Image
 
 ```bash
-podman pull quay.io/validatedpatterns/vp-laas-config-container:latest
+podman pull quay.io/validatedpatterns/vp-ocaas-config-container:latest
 ```

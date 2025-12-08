@@ -8,7 +8,7 @@ spec:
   branch: {{ .Values.global.targetRevision }}
   connection_secret: aap-login-token
   description: "Ansible project to wrap jobs interacting with the ciphetrust manager"
-  name: laas-project
+  name: ocaas-project
   organization: Default
   repo: {{ .Values.global.repoURL }}
   scm_type: git

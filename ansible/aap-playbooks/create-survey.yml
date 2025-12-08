@@ -1,0 +1,124 @@
+---
+- hosts: localhost
+  gather_facts: no
+  collections:
+    - ansible.controller
+
+  tasks:
+    - name: Read vars file
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../vars.yml"
+
+    - name: Set AAP connection variables
+      no_log: true
+      ansible.builtin.set_fact:
+        aap_hostname: "{{ aap_hostname | default('aap-ansible-automation-platform.' + global.localClusterDomain | default('localhost')) }}"
+        aap_validate_certs: "{{ aap_validate_certs | default(false) }}"
+        aap_username: "{{ aap_username | default('admin') }}"
+        aap_password: "{{ aap_password | default(lookup('file', '/pattern-home/aap-admin-password/password') | default('admin')) }}"
+        job_template_name: "{{ job_template_name | default('laas-job') }}"
+
+    - name: Build survey spec from vars.yml
+      ansible.builtin.set_fact:
+        survey_spec:
+          - question_name: "Cluster Name"
+            question_description: "Name of the cluster to deploy"
+            variable: "cluster_name_input"
+            required: true
+            type: "text"
+            default: ""
+          - question_name: "Cluster Group"
+            question_description: "Cluster group for application deployment"
+            variable: "cluster_clusterGroup_input"
+            required: true
+            type: "text"
+            default: ""
+          - question_name: "Base Domain"
+            question_description: "Base domain for the cluster"
+            variable: "cluster_baseDomain_input"
+            required: true
+            type: "text"
+            default: ""
+          - question_name: "Cloud Provider"
+            question_description: "Cloud provider (aws, azure, gcp)"
+            variable: "cloud_provider_input"
+            required: true
+            type: "multiplechoice"
+            choices: |
+              aws
+              azure
+              gcp
+            default: ""
+          - question_name: "Cloud Region"
+            question_description: "Region for cloud deployment"
+            variable: "cloud_region_input"
+            required: true
+            type: "text"
+            default: ""
+          - question_name: "Control Plane Replicas"
+            question_description: "Number of control plane replicas"
+            variable: "mp_controlPlane_replicas_input"
+            required: true
+            type: "integer"
+            default: "3"
+          - question_name: "Control Plane Machine Type"
+            question_description: "Machine type for control plane nodes"
+            variable: "mp_controlPlane_machineType_input"
+            required: true
+            type: "text"
+            default: ""
+          - question_name: "Worker Replicas"
+            question_description: "Number of worker replicas"
+            variable: "mp_workers_replicas_input"
+            required: true
+            type: "integer"
+            default: "3"
+          - question_name: "Worker Machine Type"
+            question_description: "Machine type for worker nodes"
+            variable: "mp_workers_machineType_input"
+            required: true
+            type: "text"
+            default: ""
+          - question_name: "Azure Resource Group"
+            question_description: "Azure resource group name (required for Azure)"
+            variable: "cc_azure_resourceGroup_input"
+            required: false
+            type: "text"
+            default: ""
+          - question_name: "GCP Project ID"
+            question_description: "GCP project ID (required for GCP)"
+            variable: "cc_gcp_projectID_input"
+            required: false
+            type: "text"
+            default: ""
+
+    - name: Get existing job template
+      ansible.controller.job_template:
+        host: "https://{{ aap_hostname }}"
+        username: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        validate_certs: "{{ aap_validate_certs }}"
+        name: "{{ job_template_name }}"
+        state: query
+      register: existing_job_template
+
+    - name: Fail if job template not found
+      ansible.builtin.fail:
+        msg: "Job template '{{ job_template_name }}' not found in AAP"
+      when: existing_job_template.job_templates | length == 0
+
+    - name: Update job template with survey
+      ansible.controller.job_template:
+        host: "https://{{ aap_hostname }}"
+        username: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        validate_certs: "{{ aap_validate_certs }}"
+        name: "{{ job_template_name }}"
+        survey_enabled: true
+        survey_spec: "{{ survey_spec }}"
+        state: present
+      register: job_template_result
+
+    - name: Display survey creation result
+      ansible.builtin.debug:
+        msg: "Survey created/updated successfully for job template '{{ job_template_name }}' (ID: {{ job_template_result.job_template.id }})"

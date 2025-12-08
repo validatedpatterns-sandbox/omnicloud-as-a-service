@@ -5,6 +5,10 @@
     - ansible.controller
 
   tasks:
+    - name: Read helm values
+      ansible.builtin.include_vars:
+        file: "/pattern-home/helm-values/values.yaml"
+
     - name: Read vars file
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../vars.yml"
@@ -12,11 +16,25 @@
     - name: Set AAP connection variables
       no_log: true
       ansible.builtin.set_fact:
-        aap_hostname: "{{ aap_hostname | default('aap-ansible-automation-platform.' + global.localClusterDomain | default('localhost')) }}"
+        aap_hostname: "{{ aap_hostname | default('aap-ansible-automation-platform.' + global.localClusterDomain) }}"
         aap_validate_certs: "{{ aap_validate_certs | default(false) }}"
         aap_username: "{{ aap_username | default('admin') }}"
         aap_password: "{{ aap_password | default(lookup('file', '/pattern-home/aap-admin-password/password') | default('admin')) }}"
-        job_template_name: "{{ job_template_name | default('laas-job') }}"
+        job_template_name: "{{ job_template_name | default('ocaas-job') }}"
+
+    - name: Wait for Automation Controller to be ready
+      ansible.builtin.uri:
+        url: "https://{{ aap_hostname }}/api/controller/v2/ping/"
+        method: GET
+        user: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        validate_certs: "{{ aap_validate_certs }}"
+        force_basic_auth: true
+      register: ping_check
+      until: ping_check.status == 200
+      retries: 30
+      delay: 10
+      ignore_errors: true
 
     - name: Build survey spec from vars.yml
       ansible.builtin.set_fact:

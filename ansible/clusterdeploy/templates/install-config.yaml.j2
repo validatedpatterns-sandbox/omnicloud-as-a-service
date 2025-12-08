@@ -62,6 +62,5 @@
       region: {{ cloud.region }}
 {% endif %}
   publish: External
-  pullSecret: '{"auths": ...}'
-  sshKey: |
-    {{ lookup('env', 'ssh_public_key') }}
+  pullSecret: '""'
+  sshKey: '""'

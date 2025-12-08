@@ -2,7 +2,7 @@
 - hosts: localhost
   gather_facts: no
   collections:
-    - ansible.controller
+    - awx.awx
 
   tasks:
     - name: Read helm values
@@ -111,10 +111,10 @@
             default: ""
 
     - name: Get existing job template
-      ansible.controller.job_template:
-        host: "https://{{ aap_hostname }}"
-        username: "{{ aap_username }}"
-        password: "{{ aap_password }}"
+      awx.awx.job_template:
+        controller_host: "https://{{ aap_hostname }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
         validate_certs: "{{ aap_validate_certs }}"
         name: "{{ job_template_name }}"
         state: query
@@ -126,10 +126,10 @@
       when: existing_job_template.job_templates | length == 0
 
     - name: Update job template with survey
-      ansible.controller.job_template:
-        host: "https://{{ aap_hostname }}"
-        username: "{{ aap_username }}"
-        password: "{{ aap_password }}"
+      awx.awx.job_template:
+        controller_host: "https://{{ aap_hostname }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
         validate_certs: "{{ aap_validate_certs }}"
         name: "{{ job_template_name }}"
         survey_enabled: true

@@ -1,0 +1,160 @@
+---
+# tasks file for install-idm
+
+- name: Debug available variables
+  ansible.builtin.debug:
+    msg:
+      - "fqdn_nodot: {{ fqdn_nodot | default('NOT SET') }}"
+      - "hostvars[inventory_hostname]['fqdn_nodot']: {{ hostvars[inventory_hostname]['fqdn_nodot'] | default('NOT SET') }}"
+      - "ipaserver_hostname: {{ ipaserver_hostname | default('NOT SET') }}"
+      - "ansible_fqdn: {{ ansible_fqdn | default('NOT SET') }}"
+      - "inventory_hostname: {{ inventory_hostname }}"
+
+- name: Set target hostname variable
+  ansible.builtin.set_fact:
+    target_hostname: "{{ fqdn_nodot | default(hostvars[inventory_hostname]['fqdn_nodot']) | default(ipaserver_hostname) | default(ansible_fqdn) }}"
+
+- name: Display target hostname
+  ansible.builtin.debug:
+    msg: "Setting hostname to: {{ target_hostname }}"
+
+- name: Ensure cloud-init config directory exists
+  ansible.builtin.file:
+    path: /etc/cloud/cloud.cfg.d
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Prevent cloud-init from overwriting hostname
+  ansible.builtin.copy:
+    dest: /etc/cloud/cloud.cfg.d/99_hostname.cfg
+    content: |
+      preserve_hostname: true
+    mode: '0644'
+  become: true
+
+- name: Set hostname using hostnamectl (transient)
+  ansible.builtin.command:
+    cmd: hostnamectl set-hostname "{{ target_hostname }}"
+  become: true
+  changed_when: true
+
+- name: Set hostname using hostnamectl (static)
+  ansible.builtin.command:
+    cmd: hostnamectl set-hostname --static "{{ target_hostname }}"
+  become: true
+  changed_when: true
+
+- name: Set hostname in /etc/hostname
+  ansible.builtin.copy:
+    dest: /etc/hostname
+    content: "{{ target_hostname }}\n"
+    mode: '0644'
+  become: true
+
+- name: Remove old hostname entry from /etc/hosts
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: "^{{ ansible_default_ipv4.address | default('127.0.0.1') }}\\s+.*"
+    state: absent
+  become: true
+  when: ansible_default_ipv4.address is defined
+
+- name: Add hostname to /etc/hosts
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    line: "{{ ansible_default_ipv4.address | default('127.0.0.1') }}\t{{ target_hostname }}"
+    state: present
+    backup: true
+  become: true
+
+- name: Verify hostname is set
+  ansible.builtin.command:
+    cmd: hostname
+  register: hostname_check
+  changed_when: false
+
+- name: Verify hostname via hostnamectl
+  ansible.builtin.command:
+    cmd: hostnamectl --static
+  register: hostnamectl_check
+  changed_when: false
+
+- name: Display hostname verification
+  ansible.builtin.debug:
+    msg:
+      - "hostname command: {{ hostname_check.stdout }}"
+      - "hostnamectl --static: {{ hostnamectl_check.stdout }}"
+      - "Expected: {{ target_hostname }}"
+
+- name: Check if ansible-galaxy is available
+  ansible.builtin.command:
+    cmd: which ansible-galaxy
+  register: ansible_galaxy_check
+  changed_when: false
+  failed_when: false
+  when: install_collections_on_target | default(true) | bool
+
+- name: Install ansible-core if not present
+  ansible.builtin.package:
+    name: ansible-core
+    state: present
+  become: true
+  when:
+    - install_collections_on_target | default(true) | bool
+    - ansible_galaxy_check.rc != 0
+
+- name: Install Ansible collections on target node
+  ansible.builtin.command:
+    cmd: "ansible-galaxy collection install {{ item.name }}"
+  loop: "{{ idm_target_collections | default([]) }}"
+  become: true
+  when:
+    - install_collections_on_target | default(true) | bool
+    - idm_target_collections is defined
+    - idm_target_collections | length > 0
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Install required packages
+  ansible.builtin.package:
+    name: "{{ idm_packages }}"
+    state: present
+  become: true
+
+- name: Enable and start firewalld
+  ansible.builtin.systemd:
+    name: firewalld
+    enabled: true
+    state: started
+  become: true
+
+- name: Add firewalld rules
+  ansible.posix.firewalld:
+    port: "{{ item.port }}"
+    permanent: true
+    immediate: true
+    state: enabled
+  loop: "{{ idm_firewalld_rules }}"
+  become: true
+
+- name: Set state for IPA server role
+  ansible.builtin.set_fact:
+    state: present
+
+- name: Include IPA server role
+  ansible.builtin.include_role:
+    name: freeipa.ansible_freeipa.ipaserver
+
+- name: Create IDM users
+  freeipa.ansible_freeipa.ipauser:
+    name: "{{ item.name }}"
+    first: "{{ item.first }}"
+    last: "{{ item.last }}"
+    ipaadmin_password: "{{ ipaadmin_password }}"
+  loop: "{{ idm_users }}"
+  become: true
+  when: idm_users | default([]) | length > 0
+  loop_control:
+    label: "{{ item.name }}"
+

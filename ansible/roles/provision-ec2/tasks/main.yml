@@ -1,0 +1,360 @@
+---
+# tasks file for provision-ec2
+
+- name: Combine all instance lists
+  ansible.builtin.set_fact:
+    ec2_instances_all: "{{ ec2_instances_idm | default([]) + ec2_instances_aap | default([]) + ec2_instances_satellite | default([]) }}"
+
+- name: Import SSH key into AWS
+  amazon.aws.ec2_key:
+    name: "{{ key_name }}"
+    region: "{{ aws_region }}"
+    key_material: "{{ lookup('file', ssh_public_key_path) }}"
+    state: present
+  when:
+    - not destroy | default(false) | bool
+    - ec2_instances_all | length > 0
+
+- name: Ensure security group exists
+  amazon.aws.ec2_group:
+    name: "{{ vpc_security_group_name }}"
+    description: "bastion security group"
+    region: "{{ aws_region }}"
+    rules:
+      - proto: tcp
+        from_port: 22
+        to_port: 22
+        cidr_ip: "{{ allow_cidrs }}"
+      - proto: tcp
+        from_port: 80
+        to_port: 80
+        cidr_ip: "{{ allow_cidrs }}"
+      - proto: tcp
+        from_port: 443
+        to_port: 443
+        cidr_ip: "{{ allow_cidrs }}"
+  register: sg
+  when:
+    - not destroy | default(false) | bool
+    - ec2_instances_all | length > 0
+
+- name: Lookup latest RHEL 9 AMI
+  amazon.aws.ec2_ami_info:
+    owners: ["{{ rhel_ami_owner }}"]
+    region: "{{ aws_region }}"
+    filters:
+      name: "RHEL-9*"
+      architecture: x86_64
+      root-device-type: ebs
+      virtualization-type: hvm
+  register: rhel_amis
+  when:
+    - not destroy | default(false) | bool
+    - ec2_instances_all | length > 0
+
+- name: Get newest AMI ID
+  ansible.builtin.set_fact:
+    ami_id: "{{ (rhel_amis.images | sort(attribute='creation_date')) | last | default({}) | dict2items | selectattr('key','equalto','image_id') | map(attribute='value') | first }}"
+  when:
+    - not destroy | default(false) | bool
+    - ec2_instances_all | length > 0
+
+- name: Check for existing EC2 instances
+  amazon.aws.ec2_instance_info:
+    region: "{{ aws_region }}"
+    filters:
+      "tag:Name": "{{ item.instance_name | default(item.name) }}"
+      instance-state-name: [running, stopped, pending]
+  register: existing_instances
+  loop: "{{ ec2_instances_all }}"
+  loop_control:
+    label: "{{ item.instance_name | default(item.name) }}"
+  when:
+    - ec2_instances_all | length > 0
+
+- name: Set fact for instances that need to be created
+  ansible.builtin.set_fact:
+    instances_to_create: "{{ instances_to_create | default([]) + [item.item] }}"
+  loop: "{{ existing_instances.results | default([]) }}"
+  when:
+    - item.instances is defined
+    - item.instances | length == 0
+  loop_control:
+    label: "{{ item.item.instance_name | default(item.item.name) }}"
+
+- name: Set fact for existing instances
+  ansible.builtin.set_fact:
+    instances_existing: "{{ instances_existing | default([]) + [item.item] }}"
+  loop: "{{ existing_instances.results | default([]) }}"
+  when:
+    - item.instances is defined
+    - item.instances | length > 0
+  loop_control:
+    label: "{{ item.item.instance_name | default(item.item.name) }}"
+
+- name: Launch EC2 instance
+  amazon.aws.ec2_instance:
+    name: "{{ item.instance_name | default(item.name) }}"
+    region: "{{ aws_region }}"
+    key_name: "{{ item.key_name | default(key_name) }}"
+    instance_type: "{{ item.instance_type | default(instance_type) }}"
+    image_id: "{{ ami_id }}"
+    security_group: "{{ item.vpc_security_group_name | default(vpc_security_group_name) }}"
+    network:
+      assign_public_ip: true
+    tags:
+      Project: "{{ item.ec2_tags | default(ec2_tags) }}"
+      Role: "{{ item.ec2_role | default(item.role) | default(ec2_role) }}"
+      InstanceType: "{{ item.instance_type | default(instance_type) }}"
+    volumes:
+      - device_name: /dev/sda1
+        ebs:
+          volume_size: "{{ item.instance_ebs_size | default(instance_ebs_size) }}"
+          volume_type: gp3
+          delete_on_termination: true
+    wait: true
+  register: ec2_result
+  loop: "{{ instances_to_create | default([]) }}"
+  loop_control:
+    label: "{{ item.instance_name | default(item.name) }}"
+  when:
+    - not destroy | default(false) | bool
+    - instances_to_create is defined and instances_to_create | length > 0
+
+- name: Set instance facts from new instances
+  ansible.builtin.set_fact:
+    instance_facts: "{{ instance_facts | default({}) | combine({item.item.instance_name | default(item.item.name): {
+      'public_ip': item.instances[0].public_ip_address | default(''),
+      'private_ip': item.instances[0].private_ip_address | default(''),
+      'instance_id': item.instances[0].instance_id | default(''),
+      'state': item.instances[0].state.name | default('')
+    }}) }}"
+  loop: "{{ ec2_result.results | default([]) }}"
+  when:
+    - not destroy | default(false) | bool
+    - ec2_result is defined
+    - item.instances is defined
+    - item.instances | length > 0
+
+- name: Set instance facts from existing instances
+  ansible.builtin.set_fact:
+    instance_facts: "{{ instance_facts | default({}) | combine({item.item.instance_name | default(item.item.name): {
+      'public_ip': item.instances[0].public_ip_address | default(''),
+      'private_ip': item.instances[0].private_ip_address | default(''),
+      'instance_id': item.instances[0].instance_id | default(''),
+      'state': item.instances[0].state.name | default('')
+    }}) }}"
+  loop: "{{ existing_instances.results | default([]) }}"
+  when:
+    - not destroy | default(false) | bool
+    - existing_instances is defined
+    - item.instances is defined
+    - item.instances | length > 0
+
+- name: Wait for SSH to be available (new instances)
+  ansible.builtin.wait_for:
+    host: "{{ instance_facts[item.item.instance_name | default(item.item.name)].public_ip }}"
+    port: 22
+    timeout: "{{ item.item.wait_for_ssh_timeout | default(wait_for_ssh_timeout) }}"
+    state: started
+  loop: "{{ ec2_result.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.instance_name | default(item.item.name) }}"
+  when:
+    - not destroy | default(false) | bool
+    - ec2_result is defined
+    - item.instances is defined
+    - item.instances | length > 0
+    - instance_facts is defined
+    - instance_facts[item.item.instance_name | default(item.item.name)] is defined
+    - instance_facts[item.item.instance_name | default(item.item.name)].public_ip | length > 0
+
+- name: Fetch host key via ssh-keyscan
+  ansible.builtin.command: "ssh-keyscan -H {{ instance_facts[item.instance_name | default(item.name)].public_ip }}"
+  register: scanned_keys
+  loop: "{{ ec2_instances_all }}"
+  loop_control:
+    label: "{{ item.instance_name | default(item.name) }}"
+  changed_when: false
+  when:
+    - not destroy | default(false) | bool
+    - ec2_instances_all | length > 0
+    - instance_facts is defined
+    - instance_facts[item.instance_name | default(item.name)] is defined
+    - instance_facts[item.instance_name | default(item.name)].public_ip | length > 0
+
+- name: Add hosts to in-memory inventory
+  ansible.builtin.add_host:
+    name: "{{ item.item.fqdn_nodot | default(item.item.instance_name | default(item.item.name)) }}"
+    ansible_host: "{{ instance_facts[item.item.instance_name | default(item.item.name)].public_ip }}"
+    groups: "{{ item.item.groups | default(['provisioned_instances']) }}"
+    ansible_user: "{{ item.item.ansible_user | default('ec2-user') }}"
+    key: "{{ item.stdout }}"
+    fqdn_nodot: "{{ item.item.fqdn_nodot | default(item.item.instance_name | default(item.item.name)) }}"
+    fqdn: "{{ item.item.fqdn | default(item.item.fqdn_nodot + '.' if (item.item.fqdn_nodot is defined and item.item.fqdn_nodot | length > 0 and item.item.fqdn_nodot[-1] != '.') else item.item.fqdn_nodot) }}"
+  loop: "{{ scanned_keys.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.instance_name | default(item.item.name) }}"
+  when:
+    - not destroy | default(false) | bool
+    - ec2_instances_all | length > 0
+    - scanned_keys is defined
+    - instance_facts is defined
+
+- name: Display instance details
+  ansible.builtin.debug:
+    msg:
+      - "Instance: {{ item.instance_name | default(item.name) }}"
+      - "  Public IP: {{ instance_facts[item.instance_name | default(item.name)].public_ip }}"
+      - "  Private IP: {{ instance_facts[item.instance_name | default(item.name)].private_ip }}"
+      - "  Instance ID: {{ instance_facts[item.instance_name | default(item.name)].instance_id }}"
+      - "  State: {{ instance_facts[item.instance_name | default(item.name)].state }}"
+  loop: "{{ ec2_instances_all }}"
+  loop_control:
+    label: "{{ item.instance_name | default(item.name) }}"
+  when:
+    - not destroy | default(false) | bool
+    - ec2_instances_all | length > 0
+    - instance_facts is defined
+    - instance_facts[item.instance_name | default(item.name)] is defined
+
+- name: Create/Update Route53 A record
+  amazon.aws.route53:
+    zone: "{{ item.hosted_zone | default(hosted_zone) }}"
+    record: "{{ item.fqdn | default(item.fqdn_nodot + '.' if (item.fqdn_nodot is defined and item.fqdn_nodot | length > 0 and item.fqdn_nodot[-1] != '.') else item.fqdn_nodot) }}"
+    type: A
+    ttl: "{{ item.dns_ttl | default(60) }}"
+    value: "{{ instance_facts[item.instance_name | default(item.name)].public_ip }}"
+    overwrite: true
+    state: present
+  register: r53_result
+  loop: "{{ ec2_instances_all }}"
+  loop_control:
+    label: "{{ item.instance_name | default(item.name) }}"
+  when:
+    - not destroy | default(false) | bool
+    - create_dns_records | default(true) | bool
+    - hosted_zone | length > 0 or item.hosted_zone is defined
+    - item.fqdn is defined or item.fqdn_nodot is defined
+    - ec2_instances_all | length > 0
+    - instance_facts is defined
+    - instance_facts[item.instance_name | default(item.name)] is defined
+    - instance_facts[item.instance_name | default(item.name)].public_ip | length > 0
+
+- name: Show DNS record creation results
+  ansible.builtin.debug:
+    var: r53_result
+  when:
+    - not destroy | default(false) | bool
+    - create_dns_records | default(true) | bool
+    - r53_result is defined
+
+# ============================================================================
+# Destroy/Delete Tasks
+# ============================================================================
+
+- name: Get all instances to delete
+  amazon.aws.ec2_instance_info:
+    region: "{{ aws_region }}"
+    filters:
+      "tag:Name": "{{ item.instance_name | default(item.name) }}"
+      instance-state-name: [running, stopped, pending, stopping]
+  register: instances_to_delete
+  loop: "{{ ec2_instances_all }}"
+  loop_control:
+    label: "{{ item.instance_name | default(item.name) }}"
+  when:
+    - destroy | default(false) | bool
+    - ec2_instances_all | length > 0
+
+- name: Set fact for instances found to delete
+  ansible.builtin.set_fact:
+    instances_found_to_delete: "{{ instances_found_to_delete | default([]) + [item.item] }}"
+  loop: "{{ instances_to_delete.results | default([]) }}"
+  when:
+    - destroy | default(false) | bool
+    - item.instances is defined
+    - item.instances | length > 0
+  loop_control:
+    label: "{{ item.item.instance_name | default(item.item.name) }}"
+
+- name: Delete Route53 DNS records
+  amazon.aws.route53:
+    zone: "{{ item.item.hosted_zone | default(hosted_zone) }}"
+    record: "{{ item.item.fqdn | default(item.item.fqdn_nodot) }}"
+    type: A
+    state: absent
+  loop: "{{ instances_to_delete.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.instance_name | default(item.item.name) }}"
+  when:
+    - destroy | default(false) | bool
+    - item.instances is defined
+    - item.instances | length > 0
+    - hosted_zone | length > 0 or item.item.hosted_zone is defined
+    - item.item.fqdn is defined or item.item.fqdn_nodot is defined
+  ignore_errors: true
+
+- name: Terminate EC2 instances
+  amazon.aws.ec2_instance:
+    instance_ids: "{{ item.instances | map(attribute='instance_id') | list }}"
+    state: absent
+    wait: true
+    wait_timeout: 600
+  loop: "{{ instances_to_delete.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.instance_name | default(item.item.name) }}"
+  when:
+    - destroy | default(false) | bool
+    - item.instances is defined
+    - item.instances | length > 0
+  register: terminate_result
+
+- name: Display termination results
+  ansible.builtin.debug:
+    msg:
+      - "Terminated instance: {{ item.item.instance_name | default(item.item.name) }}"
+      - "  Instance IDs: {{ item.instances | map(attribute='instance_id') | list }}"
+  loop: "{{ instances_to_delete.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.instance_name | default(item.item.name) }}"
+  when:
+    - destroy | default(false) | bool
+    - terminate_result is defined
+    - item.instances is defined
+    - item.instances | length > 0
+
+- name: Delete security group
+  amazon.aws.ec2_group:
+    name: "{{ vpc_security_group_name }}"
+    region: "{{ aws_region }}"
+    state: absent
+  when:
+    - destroy | default(false) | bool
+    - delete_security_group | default(false) | bool
+    - ec2_instances_all | length > 0
+  ignore_errors: true
+
+- name: Delete SSH key
+  amazon.aws.ec2_key:
+    name: "{{ key_name }}"
+    region: "{{ aws_region }}"
+    state: absent
+  when:
+    - destroy | default(false) | bool
+    - delete_ssh_key | default(false) | bool
+    - ec2_instances_all | length > 0
+  ignore_errors: true
+
+- name: Summary of destroyed resources
+  ansible.builtin.debug:
+    msg:
+      - "Destroy operation completed"
+      - "Terminated {{ instances_found_to_delete | default([]) | length }} instance(s)"
+      - "Deleted DNS records for instances with fqdn/fqdn_nodot configured"
+      - "Security group deletion: {{ 'enabled' if delete_security_group else 'skipped (set delete_security_group=true to enable)' }}"
+      - "SSH key deletion: {{ 'enabled' if delete_ssh_key else 'skipped (set delete_ssh_key=true to enable)' }}"
+  when:
+    - destroy | default(false) | bool
+    - instances_found_to_delete is defined
+

@@ -1,0 +1,139 @@
+---
+# Centralized Infrastructure and IDM Configuration Variables
+# Use this file to configure all EC2 provisioning and IDM installation variables
+# 
+# Usage:
+#   - Edit this file to configure your infrastructure
+#   - Run: ansible-playbook create-idm-infra.yml
+#   - Destroy: ansible-playbook destroy-idm-infra.yml
+#   - Or use Makefile targets: make idm-create, make idm-destroy
+
+# ============================================================================
+# AWS Configuration
+# ============================================================================
+aws_region: "us-west-1"
+key_name: "idm"
+ssh_public_key_path: "~/.ssh/id_rsa.pub"
+vpc_security_group_name: "bastion-sg"
+allow_cidrs: "0.0.0.0/0"
+
+# ============================================================================
+# Route53 DNS Configuration
+# ============================================================================
+hosted_zone: "example.com."  # Route53 hosted zone (with trailing dot)
+create_dns_records: true  # Set to false to skip DNS record creation
+
+# ============================================================================
+# EC2 Instance Configuration
+# ============================================================================
+# Default instance settings (can be overridden per instance)
+instance_type: "t3.medium"
+instance_ebs_size: 20
+wait_for_ssh_timeout: 600
+
+# EC2 Tags
+ec2_tags: "omnicloud"
+ec2_role: "bastion"
+
+# ============================================================================
+# IDM Instances Configuration
+# ============================================================================
+ec2_instances_idm:
+  - name: "idm-server-01"
+    instance_name: "idm-server-01"
+    instance_type: "t3.large"
+    ec2_role: "idm"
+    fqdn: "idm01.example.com."  # With trailing dot for Route53
+    fqdn_nodot: "idm01.example.com"  # Without trailing dot for inventory
+    groups: ["idm_servers", "ipaservers"]
+
+# ============================================================================
+# AAP Instances Configuration
+# ============================================================================
+ec2_instances_aap: []
+  # Uncomment and configure as needed:
+  # ec2_instances_aap:
+  #   - name: "aap-controller-01"
+  #     instance_name: "aap-controller-01"
+  #     instance_type: "t3.xlarge"
+  #     ec2_role: "aap"
+  #     fqdn: "aap01.example.com."
+  #     fqdn_nodot: "aap01.example.com"
+  #     groups: ["aap_servers"]
+
+# ============================================================================
+# Satellite Instances Configuration
+# ============================================================================
+ec2_instances_satellite: []
+  # Uncomment and configure as needed:
+  # ec2_instances_satellite:
+  #   - name: "satellite-server-01"
+  #     instance_name: "satellite-server-01"
+  #     instance_type: "t3.xlarge"
+  #     ec2_role: "satellite"
+  #     fqdn: "sat01.example.com."
+  #     fqdn_nodot: "sat01.example.com"
+  #     groups: ["satellite_servers"]
+
+# ============================================================================
+# IDM/FreeIPA Configuration
+# ============================================================================
+ipa_zone: "example.com"
+ipa_pw: "ENTER_PW_FOR_IPA"
+
+# IDM Server Configuration
+# Note: ipaserver_hostname is automatically set from fqdn_nodot
+ipaserver_no_host_dns: true
+ipaserver_setup_dns: false
+ipaserver_setup_adtrust: false
+ipaserver_setup_kra: false
+ipaserver_netbios_name: "VPLAB"
+ipaserver_domain: "{{ ipa_zone }}"
+ipaserver_realm: "{{ ipa_zone | upper }}"
+ipaadmin_password: "{{ ipa_pw }}"
+ipadm_password: "{{ ipa_pw }}"
+
+# IDM Packages
+idm_packages:
+  - vim
+  - git
+  - ipa-server
+  - firewalld
+
+# IDM Firewalld Rules
+idm_firewalld_rules:
+  - port: "22/tcp"
+  - port: "80/tcp"
+  - port: "443/tcp"
+  - port: "464/tcp"
+  - port: "389/tcp"
+  - port: "636/tcp"
+  - port: "88/tcp"
+  - port: "88/udp"
+
+# IDM Users
+idm:
+  users:
+    - name: user1
+      first: user
+      last: name
+    - name: user2
+      first: user
+      last: name
+
+# ============================================================================
+# Destroy/Delete Configuration
+# ============================================================================
+# These are typically set via command line or playbook vars, not here
+# destroy: false  # Set to true to destroy all resources
+# delete_security_group: false  # Set to true to delete security group on destroy
+# delete_ssh_key: false  # Set to true to delete SSH key on destroy
+
+# ============================================================================
+# Target Node Configuration
+# ============================================================================
+install_collections_on_target: true  # Install Ansible collections on target nodes
+idm_target_collections:
+  - name: freeipa.ansible_freeipa
+  - name: ansible.posix
+

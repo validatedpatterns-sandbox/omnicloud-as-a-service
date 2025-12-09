@@ -87,7 +87,7 @@
   ignore_errors: true
   failed_when: false
 
-- name: Update job template with inventory and project
+- name: Update job template with inventory, project, and playbook in one call
   ansible.builtin.uri:
     url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
     method: PATCH
@@ -99,8 +99,16 @@
     body:
       inventory: "{{ target_inventory_id }}"
       project: "{{ target_project_id }}"
+      playbook: "site.yaml"
     status_code: [200, 201, 202, 204]
   register: update_template_result
+  ignore_errors: true
+  failed_when: false
+
+- name: Display update result
+  ansible.builtin.debug:
+    msg: "Template update result - Status: {{ update_template_result.status | default('unknown') }}, Response: {{ update_template_result.json | default(update_template_result.msg) | default('unknown') | to_nice_json }}"
+  when: update_template_result.status is not defined or update_template_result.status not in [200, 201, 202, 204]
 
 - name: Verify template was updated
   ansible.builtin.uri:
@@ -116,26 +124,6 @@
   ansible.builtin.debug:
     msg: "Updated state - Inventory: {{ updated_template.json.inventory | default('not set') }} (expected: {{ target_inventory_id }}), Project: {{ updated_template.json.project | default('not set') }} (expected: {{ target_project_id }}), Playbook: {{ updated_template.json.playbook | default('not set') }}, Credentials: {{ updated_template.json.summary_fields.credentials | default([]) | map(attribute='id') | list }} (expected: {{ [target_credential_id] if (target_credential_id is defined and target_credential_id != None) else [] }})"
 
-- name: Update job template playbook
-  ansible.builtin.uri:
-    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
-    method: PATCH
-    user: "{{ aap_username }}"
-    password: "{{ aap_password }}"
-    validate_certs: "{{ aap_validate_certs }}"
-    force_basic_auth: true
-    body_format: json
-    body:
-      playbook: "site.yaml"
-    status_code: [200, 201, 202, 204]
-  register: update_playbook_result
-  ignore_errors: true
-  failed_when: false
-
-- name: Warn if playbook update failed
-  ansible.builtin.debug:
-    msg: "WARNING: Failed to update playbook to 'site.yaml' for '{{ item.template_name }}'. The playbook may not exist in the project yet, or the project may need to be synced. Status: {{ update_playbook_result.status | default('unknown') }}, Response: {{ update_playbook_result.json | default(update_playbook_result.msg) | default('unknown') }}"
-  when: update_playbook_result.status is not defined or update_playbook_result.status not in [200, 201, 202, 204]
 
 - name: Enable survey on job template
   ansible.builtin.uri:

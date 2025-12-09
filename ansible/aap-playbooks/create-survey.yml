@@ -223,6 +223,20 @@
       ignore_errors: true
       when: project_sync_result.status is defined and project_sync_result.status in [200, 201, 202, 204]
 
+    - name: Get project details to see available playbooks
+      ansible.builtin.uri:
+        url: "https://{{ aap_hostname }}/api/controller/v2/projects/{{ target_project_id }}/"
+        method: GET
+        user: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        validate_certs: "{{ aap_validate_certs }}"
+        force_basic_auth: true
+      register: project_details
+
+    - name: Display project playbooks
+      ansible.builtin.debug:
+        msg: "Project '{{ project_details.json.name }}' status: {{ project_details.json.status }}, Last update: {{ project_details.json.last_updated | default('never') }}. Note: Playbook list may need to be checked via project sync."
+
     - name: Create or update job templates for each cloud provider
       ansible.builtin.include_tasks: tasks/create-job-template-survey.yml
       loop: "{{ cloud_providers }}"

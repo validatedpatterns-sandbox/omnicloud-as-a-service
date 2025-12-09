@@ -36,7 +36,7 @@
 
     - name: Build survey spec from vars.yml
       ansible.builtin.set_fact:
-        survey_spec:
+        survey_questions:
           - question_name: "Cluster Name"
             question_description: "Name of the cluster to deploy"
             variable: "cluster_name_input"
@@ -108,6 +108,12 @@
             type: "text"
             default: ""
 
+    - name: Build survey spec with description
+      ansible.builtin.set_fact:
+        survey_spec:
+          description: "Cluster deployment configuration survey"
+          spec: "{{ survey_questions }}"
+
     - name: Get all job templates
       ansible.builtin.uri:
         url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/"
@@ -163,6 +169,7 @@
     - name: Debug survey spec before sending
       ansible.builtin.debug:
         var: survey_spec
+      when: survey_spec is defined
 
     - name: Set survey spec on job template
       ansible.builtin.uri:

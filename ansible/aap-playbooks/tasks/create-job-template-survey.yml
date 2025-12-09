@@ -3,7 +3,7 @@
   ansible.builtin.set_fact:
     existing_template: "{{ all_job_templates.json.results | default([]) | selectattr('name', 'equalto', item.template_name) | list | first | default({}) }}"
 
-- name: Create job template if it doesn't exist (use hello_world.yml initially, will be updated later)
+- name: Create job template if it doesn't exist
   ansible.builtin.uri:
     url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/"
     method: POST
@@ -17,7 +17,7 @@
       description: "Job template for {{ item.name }} cloud provider deployments"
       inventory: "{{ target_inventory_id }}"
       project: "{{ target_project_id }}"
-      playbook: "hello_world.yml"
+      playbook: "ansible/site.yaml"
       job_type: "run"
     status_code: [200, 201]
   register: create_template_result
@@ -56,7 +56,7 @@
 
 - name: Display template update information
   ansible.builtin.debug:
-    msg: "Updating job template '{{ item.template_name }}' (ID: {{ template_id }}) with inventory={{ target_inventory_id }}, project={{ target_project_id }}, playbook=site.yaml, credentials={{ [target_credential_id] if (target_credential_id is defined and target_credential_id != None) else [] }}"
+    msg: "Updating job template '{{ item.template_name }}' (ID: {{ template_id }}) with inventory={{ target_inventory_id }}, project={{ target_project_id }}, playbook=ansible/site.yaml, credentials={{ [target_credential_id] if (target_credential_id is defined and target_credential_id != None) else [] }}"
 
 - name: Get current job template state (refresh after potential creation)
   ansible.builtin.uri:
@@ -118,7 +118,7 @@
   ignore_errors: true
   failed_when: false
 
-- name: Update job template using PUT with null playbook
+- name: Update job template with all required settings
   ansible.builtin.uri:
     url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
     method: PUT
@@ -132,7 +132,7 @@
       description: "{{ current_template.json.description | default('Job template for ' + item.name + ' cloud provider deployments') }}"
       inventory: "{{ target_inventory_id }}"
       project: "{{ target_project_id }}"
-      playbook: null
+      playbook: "ansible/site.yaml"
       job_type: "{{ current_template.json.job_type | default('run') }}"
       survey_enabled: "{{ current_template.json.survey_enabled | default(true) }}"
     status_code: [200, 201, 202, 204]
@@ -145,7 +145,12 @@
     msg: "Inventory/Project update - Status: {{ update_template_result.status | default('unknown') }}, Response: {{ update_template_result.json | default(update_template_result.msg) | default('unknown') | to_nice_json }}"
   when: update_template_result.status is not defined or update_template_result.status not in [200, 201, 202, 204]
 
-- name: Try to update playbook to site.yaml
+- name: Verify playbook was set correctly
+  ansible.builtin.debug:
+    msg: "Playbook update result - Status: {{ update_template_result.status | default('unknown') }}, Playbook in response: {{ update_template_result.json.playbook | default('not set') if update_template_result.json is defined else 'unknown' }}"
+  when: update_template_result.status is defined and update_template_result.status in [200, 201, 202, 204]
+
+- name: Try to update playbook if PUT didn't set it correctly
   ansible.builtin.uri:
     url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
     method: PATCH
@@ -155,16 +160,19 @@
     force_basic_auth: true
     body_format: json
     body:
-      playbook: "site.yaml"
+      playbook: "ansible/site.yaml"
     status_code: [200, 201, 202, 204]
   register: update_playbook_result
+  when: update_template_result.status is not defined or update_template_result.status not in [200, 201, 202, 204]
   ignore_errors: true
   failed_when: false
 
 - name: Display playbook update result
   ansible.builtin.debug:
     msg: "Playbook update - Status: {{ update_playbook_result.status | default('unknown') }}, Response: {{ update_playbook_result.json | default(update_playbook_result.msg) | default('unknown') | to_nice_json }}"
-  when: update_playbook_result.status is not defined or update_playbook_result.status not in [200, 201, 202, 204]
+  when:
+    - update_playbook_result is defined
+    - update_playbook_result.status is not defined or update_playbook_result.status not in [200, 201, 202, 204]
 
 - name: Verify template was updated
   ansible.builtin.uri:

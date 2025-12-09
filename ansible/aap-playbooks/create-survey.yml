@@ -120,22 +120,31 @@
 
     - name: Find job template by name
       ansible.builtin.set_fact:
-        job_template_exists: "{{ all_job_templates.json.results | default([]) | selectattr('name', 'equalto', job_template_name) | list | length > 0 }}"
         matching_templates: "{{ all_job_templates.json.results | default([]) | selectattr('name', 'equalto', job_template_name) | list }}"
+
+    - name: Set job template to use (use specified name or fallback to first available)
+      ansible.builtin.set_fact:
+        job_template_exists: "{{ matching_templates | length > 0 }}"
+        job_template_to_use: "{{ matching_templates[0] if matching_templates | length > 0 else (all_job_templates.json.results | default([]) | first) }}"
+        actual_template_name: "{{ (matching_templates[0].name if matching_templates | length > 0 else (all_job_templates.json.results | default([]) | first).name) | default(job_template_name) }}"
 
     - name: Set job template ID
       ansible.builtin.set_fact:
-        job_template_id: "{{ matching_templates[0].id }}"
-      when: job_template_exists
+        job_template_id: "{{ job_template_to_use.id }}"
+      when: job_template_to_use is defined
+
+    - name: Display template selection
+      ansible.builtin.debug:
+        msg: "Using job template: '{{ actual_template_name }}' (ID: {{ job_template_id }}){% if not job_template_exists %}. Note: Requested template '{{ job_template_name }}' not found, using first available template.{% endif %}"
 
     - name: Display all available job templates
       ansible.builtin.debug:
         msg: "Available job templates: {{ all_job_templates.json.results | default([]) | map(attribute='name') | list }}"
 
-    - name: Warn if job template not found
-      ansible.builtin.debug:
-        msg: "WARNING: Job template '{{ job_template_name }}' not found in AAP. Available job templates: {{ all_job_templates.json.results | default([]) | map(attribute='name') | list }}. Skipping survey creation."
-      when: not job_template_exists
+    - name: Fail if no job templates available
+      ansible.builtin.fail:
+        msg: "No job templates found in AAP. Cannot create survey."
+      when: all_job_templates.json.results | default([]) | length == 0
 
     - name: Update job template with survey
       ansible.builtin.uri:
@@ -150,14 +159,9 @@
           survey_enabled: true
           survey_spec: "{{ survey_spec }}"
       register: job_template_result
-      when: job_template_exists
+      when: job_template_id is defined
 
     - name: Display survey creation result
       ansible.builtin.debug:
-        msg: "Survey created/updated successfully for job template '{{ job_template_name }}' (ID: {{ job_template_id }})"
-      when: job_template_exists
-
-    - name: Display skip message if template not found
-      ansible.builtin.debug:
-        msg: "Survey creation skipped - job template '{{ job_template_name }}' does not exist"
-      when: not job_template_exists
+        msg: "Survey created/updated successfully for job template '{{ actual_template_name }}' (ID: {{ job_template_id }})"
+      when: job_template_result is defined

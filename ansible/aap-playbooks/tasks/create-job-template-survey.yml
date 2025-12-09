@@ -19,24 +19,14 @@
       project: "{{ default_project_id }}"
       playbook: "{{ job_template_playbook | default('hello_world.yml') }}"
       job_type: "run"
+    status_code: [200, 201]
   register: create_template_result
   when: existing_template is not defined or existing_template == {}
   ignore_errors: true
 
-- name: Refresh job templates list after creation
-  ansible.builtin.uri:
-    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/?name={{ item.template_name }}"
-    method: GET
-    user: "{{ aap_username }}"
-    password: "{{ aap_password }}"
-    validate_certs: "{{ aap_validate_certs }}"
-    force_basic_auth: true
-  register: refreshed_template
-  when: existing_template is not defined or existing_template == {}
-
 - name: Get job template ID (use existing or newly created)
   ansible.builtin.set_fact:
-    template_id: "{{ (existing_template.id if (existing_template is defined and existing_template != {}) else (refreshed_template.json.results[0].id if (refreshed_template is defined and refreshed_template.json.results | length > 0) else (create_template_result.json.id | default(None)))) | default(existing_template.id) }}"
+    template_id: "{{ existing_template.id if (existing_template is defined and existing_template != {}) else (create_template_result.json.id | default(None)) }}"
 
 - name: Fail if template ID cannot be determined
   ansible.builtin.fail:

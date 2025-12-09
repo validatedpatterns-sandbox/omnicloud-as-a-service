@@ -145,10 +145,24 @@
         force_basic_auth: true
       register: all_projects
 
-    - name: Set default inventory and project IDs
+    - name: Set inventory and project IDs
       ansible.builtin.set_fact:
-        default_inventory_id: "{{ all_inventories.json.results[0].id | default(1) }}"
-        default_project_id: "{{ all_projects.json.results[0].id | default(6) }}"
+        target_inventory_id: "{{ all_inventories.json.results | default([]) | selectattr('name', 'equalto', 'base-inventory') | list | first | default({}) | map(attribute='id') | list | first | default(all_inventories.json.results[0].id | default(1)) }}"
+        target_project_id: "{{ all_projects.json.results | default([]) | selectattr('name', 'equalto', 'ocaas-project') | list | first | default({}) | map(attribute='id') | list | first | default(all_projects.json.results[0].id | default(6)) }}"
+
+    - name: Get all credentials
+      ansible.builtin.uri:
+        url: "https://{{ aap_hostname }}/api/controller/v2/credentials/"
+        method: GET
+        user: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        validate_certs: "{{ aap_validate_certs }}"
+        force_basic_auth: true
+      register: all_credentials
+
+    - name: Set credential ID for ocaas-cluster-creds
+      ansible.builtin.set_fact:
+        target_credential_id: "{{ all_credentials.json.results | default([]) | selectattr('name', 'equalto', 'ocaas-cluster-creds') | list | first | default({}) | map(attribute='id') | list | first | default(None) }}"
 
     - name: Get all job templates
       ansible.builtin.uri:
@@ -162,7 +176,7 @@
 
     - name: Display available resources
       ansible.builtin.debug:
-        msg: "Available inventories: {{ all_inventories.json.results | default([]) | map(attribute='name') | list }}, Available projects: {{ all_projects.json.results | default([]) | map(attribute='name') | list }}"
+        msg: "Available inventories: {{ all_inventories.json.results | default([]) | map(attribute='name') | list }}, Available projects: {{ all_projects.json.results | default([]) | map(attribute='name') | list }}, Target inventory ID: {{ target_inventory_id }}, Target project ID: {{ target_project_id }}, Target credential ID: {{ target_credential_id }}"
 
     - name: Create or update job templates for each cloud provider
       ansible.builtin.include_tasks: tasks/create-job-template-survey.yml

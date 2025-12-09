@@ -15,10 +15,11 @@
     body:
       name: "{{ item.template_name }}"
       description: "Job template for {{ item.name }} cloud provider deployments"
-      inventory: "{{ default_inventory_id }}"
-      project: "{{ default_project_id }}"
-      playbook: "{{ job_template_playbook | default('hello_world.yml') }}"
+      inventory: "{{ target_inventory_id }}"
+      project: "{{ target_project_id }}"
+      playbook: "ansible/site.yaml"
       job_type: "run"
+      credentials: "{{ [target_credential_id] if (target_credential_id is defined and target_credential_id != None) else [] }}"
     status_code: [200, 201]
   register: create_template_result
   when: existing_template is not defined or existing_template == {}
@@ -33,6 +34,27 @@
     msg: "Could not determine template ID for '{{ item.template_name }}'. Template may not exist and creation may have failed."
   when: template_id is not defined or template_id == None
 
+- name: Display template update information
+  ansible.builtin.debug:
+    msg: "Updating job template '{{ item.template_name }}' (ID: {{ template_id }}) with inventory={{ target_inventory_id }}, project={{ target_project_id }}, playbook=ansible/site.yaml, credentials={{ [target_credential_id] if (target_credential_id is defined and target_credential_id != None) else [] }}"
+
+- name: Update job template with correct inventory, project, playbook, and credentials
+  ansible.builtin.uri:
+    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
+    method: PATCH
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    validate_certs: "{{ aap_validate_certs }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      inventory: "{{ target_inventory_id }}"
+      project: "{{ target_project_id }}"
+      playbook: "ansible/site.yaml"
+      credentials: "{{ [target_credential_id] if (target_credential_id is defined and target_credential_id != None) else [] }}"
+    status_code: [200, 201, 202, 204]
+  register: update_template_result
+
 - name: Enable survey on job template
   ansible.builtin.uri:
     url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
@@ -44,6 +66,7 @@
     body_format: json
     body:
       survey_enabled: true
+    status_code: [200, 201, 202, 204]
   register: enable_survey_result
 
 - name: Set survey spec on job template
@@ -77,4 +100,4 @@
 
 - name: Display survey creation result
   ansible.builtin.debug:
-    msg: "Survey created/updated successfully for job template '{{ item.template_name }}' (ID: {{ template_id }}). Survey enabled: {{ verify_template.json.survey_enabled | default('not set') }}"
+    msg: "Job template '{{ item.template_name }}' (ID: {{ template_id }}) updated successfully. Inventory: {{ verify_template.json.inventory | default('not set') }}, Project: {{ verify_template.json.project | default('not set') }}, Playbook: {{ verify_template.json.playbook | default('not set') }}, Credentials: {{ verify_template.json.summary_fields.credentials | default([]) | map(attribute='name') | list | default(['not set']) }}, Survey enabled: {{ verify_template.json.survey_enabled | default('not set') }}"

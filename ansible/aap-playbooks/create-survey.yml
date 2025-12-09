@@ -173,10 +173,12 @@
         validate_certs: "{{ aap_validate_certs }}"
         force_basic_auth: true
         body_format: json
-        body: "{{ survey_spec }}"
+        body:
+          spec: "{{ survey_spec }}"
       register: job_template_result
       when: job_template_id is defined
       ignore_errors: true
+      failed_when: false
 
     - name: Debug API response
       ansible.builtin.debug:

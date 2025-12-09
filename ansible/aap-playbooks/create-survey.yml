@@ -108,24 +108,34 @@
             type: "text"
             default: ""
 
-    - name: Get existing job template
+    - name: Get all job templates
       ansible.builtin.uri:
-        url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/?name={{ job_template_name }}"
+        url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/"
         method: GET
         user: "{{ aap_username }}"
         password: "{{ aap_password }}"
         validate_certs: "{{ aap_validate_certs }}"
         force_basic_auth: true
-      register: existing_job_template
+      register: all_job_templates
 
-    - name: Fail if job template not found
-      ansible.builtin.fail:
-        msg: "Job template '{{ job_template_name }}' not found in AAP"
-      when: existing_job_template.json.results | length == 0
+    - name: Find job template by name
+      ansible.builtin.set_fact:
+        job_template_exists: "{{ all_job_templates.json.results | default([]) | selectattr('name', 'equalto', job_template_name) | list | length > 0 }}"
+        matching_templates: "{{ all_job_templates.json.results | default([]) | selectattr('name', 'equalto', job_template_name) | list }}"
 
     - name: Set job template ID
       ansible.builtin.set_fact:
-        job_template_id: "{{ existing_job_template.json.results[0].id }}"
+        job_template_id: "{{ matching_templates[0].id }}"
+      when: job_template_exists
+
+    - name: Display all available job templates
+      ansible.builtin.debug:
+        msg: "Available job templates: {{ all_job_templates.json.results | default([]) | map(attribute='name') | list }}"
+
+    - name: Warn if job template not found
+      ansible.builtin.debug:
+        msg: "WARNING: Job template '{{ job_template_name }}' not found in AAP. Available job templates: {{ all_job_templates.json.results | default([]) | map(attribute='name') | list }}. Skipping survey creation."
+      when: not job_template_exists
 
     - name: Update job template with survey
       ansible.builtin.uri:
@@ -140,7 +150,14 @@
           survey_enabled: true
           survey_spec: "{{ survey_spec }}"
       register: job_template_result
+      when: job_template_exists
 
     - name: Display survey creation result
       ansible.builtin.debug:
         msg: "Survey created/updated successfully for job template '{{ job_template_name }}' (ID: {{ job_template_id }})"
+      when: job_template_exists
+
+    - name: Display skip message if template not found
+      ansible.builtin.debug:
+        msg: "Survey creation skipped - job template '{{ job_template_name }}' does not exist"
+      when: not job_template_exists

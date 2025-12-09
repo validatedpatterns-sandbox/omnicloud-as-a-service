@@ -87,7 +87,23 @@
   ignore_errors: true
   failed_when: false
 
-- name: Update job template with inventory and project (playbook will be updated separately if it exists)
+- name: Update job template - first clear playbook, then update project and inventory
+  ansible.builtin.uri:
+    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
+    method: PATCH
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    validate_certs: "{{ aap_validate_certs }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      playbook: ""
+    status_code: [200, 201, 202, 204]
+  register: clear_playbook_result
+  ignore_errors: true
+  failed_when: false
+
+- name: Update job template with inventory and project
   ansible.builtin.uri:
     url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
     method: PATCH
@@ -107,7 +123,7 @@
     msg: "Inventory/Project update - Status: {{ update_template_result.status | default('unknown') }}, Response: {{ update_template_result.json | default(update_template_result.msg) | default('unknown') | to_nice_json }}"
   when: update_template_result.status is not defined or update_template_result.status not in [200, 201, 202, 204]
 
-- name: Try to update playbook separately
+- name: Try to update playbook to site.yaml
   ansible.builtin.uri:
     url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
     method: PATCH

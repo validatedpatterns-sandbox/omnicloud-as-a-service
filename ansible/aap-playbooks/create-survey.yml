@@ -76,7 +76,7 @@
             variable: "mp_controlPlane_replicas_input"
             required: true
             type: "integer"
-            default: "3"
+            default: 3
           - question_name: "Control Plane Machine Type"
             question_description: "Machine type for control plane nodes"
             variable: "mp_controlPlane_machineType_input"
@@ -88,7 +88,7 @@
             variable: "mp_workers_replicas_input"
             required: true
             type: "integer"
-            default: "3"
+            default: 3
           - question_name: "Worker Machine Type"
             question_description: "Machine type for worker nodes"
             variable: "mp_workers_machineType_input"

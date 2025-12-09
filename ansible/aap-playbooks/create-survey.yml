@@ -111,6 +111,7 @@
     - name: Build survey spec with description
       ansible.builtin.set_fact:
         survey_spec:
+          name: "Cluster Deployment Survey"
           description: "Cluster deployment configuration survey"
           spec: "{{ survey_questions }}"
 

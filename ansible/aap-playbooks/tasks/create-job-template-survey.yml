@@ -38,7 +38,56 @@
   ansible.builtin.debug:
     msg: "Updating job template '{{ item.template_name }}' (ID: {{ template_id }}) with inventory={{ target_inventory_id }}, project={{ target_project_id }}, playbook=site.yaml, credentials={{ [target_credential_id] if (target_credential_id is defined and target_credential_id != None) else [] }}"
 
-- name: Update job template with inventory, project, and credentials
+- name: Get current job template state
+  ansible.builtin.uri:
+    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
+    method: GET
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    validate_certs: "{{ aap_validate_certs }}"
+    force_basic_auth: true
+  register: current_template
+
+- name: Display current template state
+  ansible.builtin.debug:
+    msg: "Current state - Inventory: {{ current_template.json.inventory | default('not set') }}, Project: {{ current_template.json.project | default('not set') }}, Playbook: {{ current_template.json.playbook | default('not set') }}, Credentials: {{ current_template.json.summary_fields.credentials | default([]) | map(attribute='id') | list }}"
+
+- name: Get current credentials for template
+  ansible.builtin.uri:
+    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/credentials/"
+    method: GET
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    validate_certs: "{{ aap_validate_certs }}"
+    force_basic_auth: true
+  register: current_credentials
+  failed_when: false
+
+- name: Check if target credential is already associated
+  ansible.builtin.set_fact:
+    credential_already_associated: "{{ target_credential_id in (current_credentials.json.results | default([]) | map(attribute='id') | list) }}"
+  when: target_credential_id is defined and target_credential_id != None
+
+- name: Associate credential with job template if not already associated
+  ansible.builtin.uri:
+    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/credentials/"
+    method: POST
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    validate_certs: "{{ aap_validate_certs }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      id: "{{ target_credential_id }}"
+    status_code: [200, 201, 202, 204]
+  register: associate_credential_result
+  when:
+    - target_credential_id is defined and target_credential_id != None
+    - credential_already_associated | default(false) == false
+  ignore_errors: true
+  failed_when: false
+
+- name: Update job template with inventory and project
   ansible.builtin.uri:
     url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
     method: PATCH
@@ -50,9 +99,22 @@
     body:
       inventory: "{{ target_inventory_id }}"
       project: "{{ target_project_id }}"
-      credentials: "{{ [target_credential_id] if (target_credential_id is defined and target_credential_id != None) else [] }}"
     status_code: [200, 201, 202, 204]
   register: update_template_result
+
+- name: Verify template was updated
+  ansible.builtin.uri:
+    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
+    method: GET
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    validate_certs: "{{ aap_validate_certs }}"
+    force_basic_auth: true
+  register: updated_template
+
+- name: Display updated template state
+  ansible.builtin.debug:
+    msg: "Updated state - Inventory: {{ updated_template.json.inventory | default('not set') }} (expected: {{ target_inventory_id }}), Project: {{ updated_template.json.project | default('not set') }} (expected: {{ target_project_id }}), Playbook: {{ updated_template.json.playbook | default('not set') }}, Credentials: {{ updated_template.json.summary_fields.credentials | default([]) | map(attribute='id') | list }} (expected: {{ [target_credential_id] if (target_credential_id is defined and target_credential_id != None) else [] }})"
 
 - name: Update job template playbook
   ansible.builtin.uri:

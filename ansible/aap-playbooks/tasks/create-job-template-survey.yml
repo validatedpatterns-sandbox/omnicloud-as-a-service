@@ -1,7 +1,7 @@
 ---
 - name: Check if job template exists
   ansible.builtin.set_fact:
-    existing_template: "{{ all_job_templates.json.results | default([]) | selectattr('name', 'equalto', item.template_name) | list | first }}"
+    existing_template: "{{ all_job_templates.json.results | default([]) | selectattr('name', 'equalto', item.template_name) | list | first | default({}) }}"
 
 - name: Create job template if it doesn't exist
   ansible.builtin.uri:

@@ -40,6 +40,10 @@
       delay: 10
       ignore_errors: true
 
+    - name: Create or update OpenShift cluster credential
+      ansible.builtin.include_tasks: tasks/create-cluster-credential.yml
+      when: openshift_create_credential | default(true)
+
     - name: Build survey spec from vars.yml
       ansible.builtin.set_fact:
         survey_questions:

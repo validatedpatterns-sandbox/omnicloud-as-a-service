@@ -60,10 +60,10 @@
             variable: "cloud_provider_input"
             required: true
             type: "multiplechoice"
-            choices: |
-              aws
-              azure
-              gcp
+            choices:
+              - "aws"
+              - "azure"
+              - "gcp"
             default: ""
           - question_name: "Cloud Region"
             question_description: "Region for cloud deployment"
@@ -146,6 +146,10 @@
         msg: "No job templates found in AAP. Cannot create survey."
       when: all_job_templates.json.results | default([]) | length == 0
 
+    - name: Debug survey spec before sending
+      ansible.builtin.debug:
+        var: survey_spec
+
     - name: Update job template with survey
       ansible.builtin.uri:
         url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ job_template_id }}/"
@@ -160,8 +164,35 @@
           survey_spec: "{{ survey_spec }}"
       register: job_template_result
       when: job_template_id is defined
+      ignore_errors: true
+
+    - name: Debug API response
+      ansible.builtin.debug:
+        var: job_template_result
+      when: job_template_result is defined
+
+    - name: Check if API call failed
+      ansible.builtin.fail:
+        msg: "Failed to update job template. Status: {{ job_template_result.status | default('unknown') }}, Response: {{ job_template_result.json | default(job_template_result.msg) | to_nice_json }}"
+      when: job_template_result is defined and job_template_result.status not in [200, 201, 202, 204]
+
+    - name: Verify survey was created
+      ansible.builtin.uri:
+        url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ job_template_id }}/"
+        method: GET
+        user: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        validate_certs: "{{ aap_validate_certs }}"
+        force_basic_auth: true
+      register: verify_template
+      when: job_template_result is defined and job_template_result.status in [200, 201, 202, 204]
+
+    - name: Display survey verification
+      ansible.builtin.debug:
+        msg: "Survey enabled: {{ verify_template.json.survey_enabled | default('not set') }}, Survey spec count: {{ verify_template.json.survey_spec | default([]) | length }}"
+      when: verify_template is defined
 
     - name: Display survey creation result
       ansible.builtin.debug:
         msg: "Survey created/updated successfully for job template '{{ actual_template_name }}' (ID: {{ job_template_id }})"
-      when: job_template_result is defined
+      when: job_template_result is defined and job_template_result.status in [200, 201, 202, 204]

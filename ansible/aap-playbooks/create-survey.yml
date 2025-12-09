@@ -1,8 +1,6 @@
 ---
 - hosts: localhost
   gather_facts: no
-  collections:
-    - awx.awx
 
   tasks:
     - name: Read helm values
@@ -111,32 +109,38 @@
             default: ""
 
     - name: Get existing job template
-      awx.awx.job_template:
-        controller_host: "https://{{ aap_hostname }}"
-        controller_username: "{{ aap_username }}"
-        controller_password: "{{ aap_password }}"
+      ansible.builtin.uri:
+        url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/?name={{ job_template_name }}"
+        method: GET
+        user: "{{ aap_username }}"
+        password: "{{ aap_password }}"
         validate_certs: "{{ aap_validate_certs }}"
-        name: "{{ job_template_name }}"
-        state: present
+        force_basic_auth: true
       register: existing_job_template
 
     - name: Fail if job template not found
       ansible.builtin.fail:
         msg: "Job template '{{ job_template_name }}' not found in AAP"
-      when: existing_job_template.job_templates | length == 0
+      when: existing_job_template.json.results | length == 0
+
+    - name: Set job template ID
+      ansible.builtin.set_fact:
+        job_template_id: "{{ existing_job_template.json.results[0].id }}"
 
     - name: Update job template with survey
-      awx.awx.job_template:
-        controller_host: "https://{{ aap_hostname }}"
-        controller_username: "{{ aap_username }}"
-        controller_password: "{{ aap_password }}"
+      ansible.builtin.uri:
+        url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ job_template_id }}/"
+        method: PATCH
+        user: "{{ aap_username }}"
+        password: "{{ aap_password }}"
         validate_certs: "{{ aap_validate_certs }}"
-        name: "{{ job_template_name }}"
-        survey_enabled: true
-        survey_spec: "{{ survey_spec }}"
-        state: present
+        force_basic_auth: true
+        body_format: json
+        body:
+          survey_enabled: true
+          survey_spec: "{{ survey_spec }}"
       register: job_template_result
 
     - name: Display survey creation result
       ansible.builtin.debug:
-        msg: "Survey created/updated successfully for job template '{{ job_template_name }}' (ID: {{ job_template_result.job_template.id }})"
+        msg: "Survey created/updated successfully for job template '{{ job_template_name }}' (ID: {{ job_template_id }})"

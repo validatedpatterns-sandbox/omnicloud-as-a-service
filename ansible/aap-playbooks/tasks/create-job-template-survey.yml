@@ -63,15 +63,16 @@
 
 - name: Set successful creation result from fallback attempts
   ansible.builtin.set_fact:
-    create_template_result: "{{ item }}"
+    create_template_result: "{{ fallback_item }}"
   loop: "{{ create_template_fallback_result.results | default([]) }}"
+  loop_control:
+    loop_var: fallback_item
+    label: "Using fallback result with playbook: {{ fallback_item.item | default('unknown') }}"
   when:
     - existing_template is not defined or existing_template == {}
     - create_template_result.status is not defined or create_template_result.status not in [200, 201]
-    - item.status is defined
-    - item.status in [200, 201]
-  loop_control:
-    label: "Using fallback result with playbook: {{ item.item }}"
+    - fallback_item.status is defined
+    - fallback_item.status in [200, 201]
 
 - name: Display template creation result
   ansible.builtin.debug:

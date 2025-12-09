@@ -3,7 +3,7 @@
   ansible.builtin.set_fact:
     existing_template: "{{ all_job_templates.json.results | default([]) | selectattr('name', 'equalto', item.template_name) | list | first | default({}) }}"
 
-- name: Create job template if it doesn't exist (without playbook initially)
+- name: Create job template if it doesn't exist (use hello_world.yml initially, will be updated later)
   ansible.builtin.uri:
     url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/"
     method: POST
@@ -17,6 +17,7 @@
       description: "Job template for {{ item.name }} cloud provider deployments"
       inventory: "{{ target_inventory_id }}"
       project: "{{ target_project_id }}"
+      playbook: "hello_world.yml"
       job_type: "run"
     status_code: [200, 201]
   register: create_template_result

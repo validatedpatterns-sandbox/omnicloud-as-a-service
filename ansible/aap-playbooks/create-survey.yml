@@ -180,8 +180,7 @@
         validate_certs: "{{ aap_validate_certs }}"
         force_basic_auth: true
         body_format: json
-        body:
-          spec: "{{ survey_spec }}"
+        body: "{{ survey_spec }}"
       register: job_template_result
       when: job_template_id is defined
       ignore_errors: true

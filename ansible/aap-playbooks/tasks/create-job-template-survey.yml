@@ -3,7 +3,7 @@
   ansible.builtin.set_fact:
     existing_template: "{{ all_job_templates.json.results | default([]) | selectattr('name', 'equalto', item.template_name) | list | first | default({}) }}"
 
-- name: Create job template if it doesn't exist
+- name: Create job template if it doesn't exist (without playbook initially)
   ansible.builtin.uri:
     url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/"
     method: POST
@@ -17,28 +17,47 @@
       description: "Job template for {{ item.name }} cloud provider deployments"
       inventory: "{{ target_inventory_id }}"
       project: "{{ target_project_id }}"
-      playbook: "site.yaml"
       job_type: "run"
-      credentials: "{{ [target_credential_id] if (target_credential_id is defined and target_credential_id != None) else [] }}"
     status_code: [200, 201]
   register: create_template_result
   when: existing_template is not defined or existing_template == {}
   ignore_errors: true
+  failed_when: false
 
-- name: Get job template ID (use existing or newly created)
+- name: Display template creation result
+  ansible.builtin.debug:
+    msg: "Template creation result - Status: {{ create_template_result.status | default('unknown') }}, Response: {{ create_template_result.json | default(create_template_result.msg) | default('unknown') | to_nice_json }}"
+  when:
+    - existing_template is not defined or existing_template == {}
+    - create_template_result.status is not defined or create_template_result.status not in [200, 201]
+
+- name: Refresh job templates list if creation may have succeeded
+  ansible.builtin.uri:
+    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/?name={{ item.template_name | urlencode }}"
+    method: GET
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    validate_certs: "{{ aap_validate_certs }}"
+    force_basic_auth: true
+  register: refreshed_templates
+  when:
+    - existing_template is not defined or existing_template == {}
+    - create_template_result.status is not defined or create_template_result.status not in [200, 201]
+
+- name: Get job template ID (use existing, newly created, or refreshed)
   ansible.builtin.set_fact:
-    template_id: "{{ existing_template.id if (existing_template is defined and existing_template != {}) else (create_template_result.json.id | default(None)) }}"
+    template_id: "{{ existing_template.id if (existing_template is defined and existing_template != {}) else (create_template_result.json.id if (create_template_result.status is defined and create_template_result.status in [200, 201]) else (refreshed_templates.json.results[0].id if (refreshed_templates is defined and refreshed_templates.json.results | length > 0) else None)) }}"
 
 - name: Fail if template ID cannot be determined
   ansible.builtin.fail:
-    msg: "Could not determine template ID for '{{ item.template_name }}'. Template may not exist and creation may have failed."
+    msg: "Could not determine template ID for '{{ item.template_name }}'. Template may not exist and creation may have failed. Creation status: {{ create_template_result.status | default('unknown') }}, Creation response: {{ create_template_result.json | default(create_template_result.msg) | default('unknown') }}"
   when: template_id is not defined or template_id == None
 
 - name: Display template update information
   ansible.builtin.debug:
     msg: "Updating job template '{{ item.template_name }}' (ID: {{ template_id }}) with inventory={{ target_inventory_id }}, project={{ target_project_id }}, playbook=site.yaml, credentials={{ [target_credential_id] if (target_credential_id is defined and target_credential_id != None) else [] }}"
 
-- name: Get current job template state
+- name: Get current job template state (refresh after potential creation)
   ansible.builtin.uri:
     url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
     method: GET
@@ -47,14 +66,17 @@
     validate_certs: "{{ aap_validate_certs }}"
     force_basic_auth: true
   register: current_template
+  when: template_id is defined and template_id != None
 
 - name: Display current template state
   ansible.builtin.debug:
     msg: "Current state - Inventory: {{ current_template.json.inventory | default('not set') }}, Project: {{ current_template.json.project | default('not set') }}, Playbook: {{ current_template.json.playbook | default('not set') }}, Credentials: {{ current_template.json.summary_fields.credentials | default([]) | map(attribute='id') | list }}"
+  when: current_template is defined
 
 - name: Check if project is changing
   ansible.builtin.set_fact:
     project_is_changing: "{{ current_template.json.project | default(0) | int != target_project_id | int }}"
+  when: current_template is defined
 
 - name: Get current credentials for template
   ansible.builtin.uri:
@@ -66,11 +88,14 @@
     force_basic_auth: true
   register: current_credentials
   failed_when: false
+  when: template_id is defined and template_id != None
 
 - name: Check if target credential is already associated
   ansible.builtin.set_fact:
     credential_already_associated: "{{ target_credential_id in (current_credentials.json.results | default([]) | map(attribute='id') | list) }}"
-  when: target_credential_id is defined and target_credential_id != None
+  when:
+    - template_id is defined and template_id != None
+    - target_credential_id is defined and target_credential_id != None
 
 - name: Associate credential with job template if not already associated
   ansible.builtin.uri:
@@ -86,6 +111,7 @@
     status_code: [200, 201, 202, 204]
   register: associate_credential_result
   when:
+    - template_id is defined and template_id != None
     - target_credential_id is defined and target_credential_id != None
     - credential_already_associated | default(false) == false
   ignore_errors: true

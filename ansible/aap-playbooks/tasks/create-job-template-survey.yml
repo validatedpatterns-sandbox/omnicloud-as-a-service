@@ -52,6 +52,10 @@
   ansible.builtin.debug:
     msg: "Current state - Inventory: {{ current_template.json.inventory | default('not set') }}, Project: {{ current_template.json.project | default('not set') }}, Playbook: {{ current_template.json.playbook | default('not set') }}, Credentials: {{ current_template.json.summary_fields.credentials | default([]) | map(attribute='id') | list }}"
 
+- name: Check if project is changing
+  ansible.builtin.set_fact:
+    project_is_changing: "{{ current_template.json.project | default(0) | int != target_project_id | int }}"
+
 - name: Get current credentials for template
   ansible.builtin.uri:
     url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/credentials/"
@@ -87,36 +91,27 @@
   ignore_errors: true
   failed_when: false
 
-- name: Update job template - first clear playbook, then update project and inventory
+- name: Update job template using PUT with null playbook
   ansible.builtin.uri:
     url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
-    method: PATCH
+    method: PUT
     user: "{{ aap_username }}"
     password: "{{ aap_password }}"
     validate_certs: "{{ aap_validate_certs }}"
     force_basic_auth: true
     body_format: json
     body:
-      playbook: ""
-    status_code: [200, 201, 202, 204]
-  register: clear_playbook_result
-  ignore_errors: true
-  failed_when: false
-
-- name: Update job template with inventory and project
-  ansible.builtin.uri:
-    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
-    method: PATCH
-    user: "{{ aap_username }}"
-    password: "{{ aap_password }}"
-    validate_certs: "{{ aap_validate_certs }}"
-    force_basic_auth: true
-    body_format: json
-    body:
+      name: "{{ current_template.json.name }}"
+      description: "{{ current_template.json.description | default('Job template for ' + item.name + ' cloud provider deployments') }}"
       inventory: "{{ target_inventory_id }}"
       project: "{{ target_project_id }}"
+      playbook: null
+      job_type: "{{ current_template.json.job_type | default('run') }}"
+      survey_enabled: "{{ current_template.json.survey_enabled | default(true) }}"
     status_code: [200, 201, 202, 204]
   register: update_template_result
+  ignore_errors: true
+  failed_when: false
 
 - name: Display update result for inventory/project
   ansible.builtin.debug:

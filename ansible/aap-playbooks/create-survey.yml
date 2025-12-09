@@ -145,10 +145,32 @@
         force_basic_auth: true
       register: all_projects
 
+    - name: Find ocaas-project
+      ansible.builtin.set_fact:
+        ocaas_project: "{{ all_projects.json.results | default([]) | selectattr('name', 'equalto', 'ocaas-project') | list | first | default({}) }}"
+
+    - name: Find base-inventory
+      ansible.builtin.set_fact:
+        base_inventory: "{{ all_inventories.json.results | default([]) | selectattr('name', 'equalto', 'base-inventory') | list | first | default({}) }}"
+
     - name: Set inventory and project IDs
       ansible.builtin.set_fact:
-        target_inventory_id: "{{ all_inventories.json.results | default([]) | selectattr('name', 'equalto', 'base-inventory') | list | first | default({}) | map(attribute='id') | list | first | default(all_inventories.json.results[0].id | default(1)) }}"
-        target_project_id: "{{ all_projects.json.results | default([]) | selectattr('name', 'equalto', 'ocaas-project') | list | first | default({}) | map(attribute='id') | list | first | default(all_projects.json.results[0].id | default(6)) }}"
+        target_inventory_id: "{{ base_inventory.id }}"
+        target_project_id: "{{ ocaas_project.id }}"
+      when:
+        - base_inventory is defined
+        - base_inventory != {}
+        - ocaas_project is defined
+        - ocaas_project != {}
+
+    - name: Verify project and inventory selection
+      ansible.builtin.debug:
+        msg: "Selected project: {{ ocaas_project.name | default('NOT FOUND') }} (ID: {{ target_project_id }}), Selected inventory: {{ base_inventory.name | default('NOT FOUND') }} (ID: {{ target_inventory_id }})"
+
+    - name: Fail if ocaas-project not found
+      ansible.builtin.fail:
+        msg: "Project 'ocaas-project' not found! Available projects: {{ all_projects.json.results | default([]) | map(attribute='name') | list }}"
+      when: ocaas_project is not defined or ocaas_project == {}
 
     - name: Get all credentials
       ansible.builtin.uri:
@@ -191,9 +213,23 @@
         force_basic_auth: true
       register: all_job_templates
 
+    - name: Display project ID mapping
+      ansible.builtin.debug:
+        msg: "Project ID mapping: {{ item.id }} = {{ item.name }}"
+      loop: "{{ all_projects.json.results | default([]) }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Display inventory ID mapping
+      ansible.builtin.debug:
+        msg: "Inventory ID mapping: {{ item.id }} = {{ item.name }}"
+      loop: "{{ all_inventories.json.results | default([]) }}"
+      loop_control:
+        label: "{{ item.name }}"
+
     - name: Display available resources
       ansible.builtin.debug:
-        msg: "Available inventories: {{ all_inventories.json.results | default([]) | map(attribute='name') | list }}, Available projects: {{ all_projects.json.results | default([]) | map(attribute='name') | list }}, Target inventory ID: {{ target_inventory_id }}, Target project ID: {{ target_project_id }}, Target credential ID: {{ target_credential_id }}"
+        msg: "Target inventory ID: {{ target_inventory_id }}, Target project ID: {{ target_project_id }}, Target credential ID: {{ target_credential_id }}"
 
     - name: Sync ocaas-project to ensure playbooks are available
       ansible.builtin.uri:

@@ -19,11 +19,59 @@
       project: "{{ target_project_id }}"
       playbook: "ansible/site.yaml"
       job_type: "run"
+      execution_environment: "{{ default_execution_environment_id }}"
     status_code: [200, 201]
   register: create_template_result
-  when: existing_template is not defined or existing_template == {}
+  when:
+    - existing_template is not defined or existing_template == {}
+    - default_execution_environment_id is defined and default_execution_environment_id != None
   ignore_errors: true
   failed_when: false
+
+- name: Try creating template with fallback playbook if ansible/site.yaml doesn't exist
+  ansible.builtin.uri:
+    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/"
+    method: POST
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    validate_certs: "{{ aap_validate_certs }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      name: "{{ item.template_name }}"
+      description: "Job template for {{ item.name }} cloud provider deployments"
+      inventory: "{{ target_inventory_id }}"
+      project: "{{ target_project_id }}"
+      playbook: "{{ fallback_playbook }}"
+      job_type: "run"
+      execution_environment: "{{ default_execution_environment_id }}"
+    status_code: [200, 201]
+  register: create_template_fallback_result
+  loop:
+    - "hello_world.yml"
+    - "site.yaml"
+  loop_control:
+    loop_var: fallback_playbook
+    label: "Trying playbook: {{ fallback_playbook }}"
+  when:
+    - existing_template is not defined or existing_template == {}
+    - create_template_result.status is not defined or create_template_result.status not in [200, 201]
+    - "'playbook' in (create_template_result.json | default({}) | to_json | lower)"
+    - default_execution_environment_id is defined and default_execution_environment_id != None
+  ignore_errors: true
+  failed_when: false
+
+- name: Set successful creation result from fallback attempts
+  ansible.builtin.set_fact:
+    create_template_result: "{{ item }}"
+  loop: "{{ create_template_fallback_result.results | default([]) }}"
+  when:
+    - existing_template is not defined or existing_template == {}
+    - create_template_result.status is not defined or create_template_result.status not in [200, 201]
+    - item.status is defined
+    - item.status in [200, 201]
+  loop_control:
+    label: "Using fallback result with playbook: {{ item.item }}"
 
 - name: Display template creation result
   ansible.builtin.debug:
@@ -118,7 +166,27 @@
   ignore_errors: true
   failed_when: false
 
-- name: Update job template with all required settings
+- name: Build update body with execution environment if available
+  ansible.builtin.set_fact:
+    update_body:
+      name: "{{ current_template.json.name }}"
+      description: "{{ current_template.json.description | default('Job template for ' + item.name + ' cloud provider deployments') }}"
+      inventory: "{{ target_inventory_id }}"
+      project: "{{ target_project_id }}"
+      playbook: "ansible/site.yaml"
+      job_type: "{{ current_template.json.job_type | default('run') }}"
+      survey_enabled: "{{ current_template.json.survey_enabled | default(true) }}"
+    update_body_with_ee:
+      name: "{{ current_template.json.name }}"
+      description: "{{ current_template.json.description | default('Job template for ' + item.name + ' cloud provider deployments') }}"
+      inventory: "{{ target_inventory_id }}"
+      project: "{{ target_project_id }}"
+      playbook: "ansible/site.yaml"
+      job_type: "{{ current_template.json.job_type | default('run') }}"
+      survey_enabled: "{{ current_template.json.survey_enabled | default(true) }}"
+      execution_environment: "{{ default_execution_environment_id }}"
+
+- name: Update job template with all required settings (including execution environment)
   ansible.builtin.uri:
     url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
     method: PUT
@@ -127,14 +195,7 @@
     validate_certs: "{{ aap_validate_certs }}"
     force_basic_auth: true
     body_format: json
-    body:
-      name: "{{ current_template.json.name }}"
-      description: "{{ current_template.json.description | default('Job template for ' + item.name + ' cloud provider deployments') }}"
-      inventory: "{{ target_inventory_id }}"
-      project: "{{ target_project_id }}"
-      playbook: "ansible/site.yaml"
-      job_type: "{{ current_template.json.job_type | default('run') }}"
-      survey_enabled: "{{ current_template.json.survey_enabled | default(true) }}"
+    body: "{{ update_body_with_ee if (default_execution_environment_id is defined and default_execution_environment_id != None) else update_body }}"
     status_code: [200, 201, 202, 204]
   register: update_template_result
   ignore_errors: true
@@ -149,6 +210,32 @@
   ansible.builtin.debug:
     msg: "Playbook update result - Status: {{ update_template_result.status | default('unknown') }}, Playbook in response: {{ update_template_result.json.playbook | default('not set') if update_template_result.json is defined else 'unknown' }}"
   when: update_template_result.status is defined and update_template_result.status in [200, 201, 202, 204]
+
+- name: Update execution environment separately to ensure it's set
+  ansible.builtin.uri:
+    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
+    method: PATCH
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    validate_certs: "{{ aap_validate_certs }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      execution_environment: "{{ default_execution_environment_id }}"
+    status_code: [200, 201, 202, 204]
+  register: update_ee_result
+  when:
+    - template_id is defined and template_id != None
+    - default_execution_environment_id is defined and default_execution_environment_id != None
+  ignore_errors: true
+  failed_when: false
+
+- name: Display execution environment update result
+  ansible.builtin.debug:
+    msg: "Execution environment update - Status: {{ update_ee_result.status | default('unknown') }}, Response: {{ update_ee_result.json | default(update_ee_result.msg) | default('unknown') }}"
+  when:
+    - update_ee_result is defined
+    - update_ee_result.status is not defined or update_ee_result.status not in [200, 201, 202, 204]
 
 - name: Try to update playbook if PUT didn't set it correctly
   ansible.builtin.uri:

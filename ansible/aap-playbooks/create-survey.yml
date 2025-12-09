@@ -203,6 +203,28 @@
         msg: "WARNING: Credential 'ocaas-cluster-creds' not found. Job templates will be created without credentials."
       when: target_credential_id is not defined or target_credential_id == None
 
+    - name: Get all execution environments
+      ansible.builtin.uri:
+        url: "https://{{ aap_hostname }}/api/controller/v2/execution_environments/"
+        method: GET
+        user: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        validate_certs: "{{ aap_validate_certs }}"
+        force_basic_auth: true
+      register: all_execution_environments
+
+    - name: Find default execution environment
+      ansible.builtin.set_fact:
+        default_execution_environment: "{{ all_execution_environments.json.results | default([]) | selectattr('name', 'equalto', 'Default execution environment') | list | first | default(all_execution_environments.json.results | default([]) | selectattr('name', 'match', '.*[Dd]efault.*') | list | first | default(all_execution_environments.json.results[0] if (all_execution_environments.json.results | length > 0) else {})) }}"
+
+    - name: Set default execution environment ID
+      ansible.builtin.set_fact:
+        default_execution_environment_id: "{{ default_execution_environment.id | default(None) if (default_execution_environment is defined and default_execution_environment != {}) else None }}"
+
+    - name: Display execution environment info
+      ansible.builtin.debug:
+        msg: "Default execution environment: {{ default_execution_environment.name | default('NOT FOUND') }} (ID: {{ default_execution_environment_id }}). Available EEs: {{ all_execution_environments.json.results | default([]) | map(attribute='name') | list }}"
+
     - name: Get all job templates
       ansible.builtin.uri:
         url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/"

@@ -17,7 +17,7 @@
       description: "Job template for {{ item.name }} cloud provider deployments"
       inventory: "{{ target_inventory_id }}"
       project: "{{ target_project_id }}"
-      playbook: "ansible/site.yaml"
+      playbook: "site.yaml"
       job_type: "run"
       credentials: "{{ [target_credential_id] if (target_credential_id is defined and target_credential_id != None) else [] }}"
     status_code: [200, 201]
@@ -50,7 +50,7 @@
     body:
       inventory: "{{ target_inventory_id }}"
       project: "{{ target_project_id }}"
-      playbook: "ansible/site.yaml"
+      playbook: "site.yaml"
       credentials: "{{ [target_credential_id] if (target_credential_id is defined and target_credential_id != None) else [] }}"
     status_code: [200, 201, 202, 204]
   register: update_template_result

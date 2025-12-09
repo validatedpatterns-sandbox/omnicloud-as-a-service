@@ -160,9 +160,26 @@
         force_basic_auth: true
       register: all_credentials
 
+    - name: Debug - Show all credential names
+      ansible.builtin.debug:
+        msg: "Available credentials: {{ all_credentials.json.results | default([]) | map(attribute='name') | list }}"
+
     - name: Set credential ID for ocaas-cluster-creds
       ansible.builtin.set_fact:
-        target_credential_id: "{{ all_credentials.json.results | default([]) | selectattr('name', 'equalto', 'ocaas-cluster-creds') | list | first | default({}) | map(attribute='id') | list | first | default(None) }}"
+        target_credential: "{{ all_credentials.json.results | default([]) | selectattr('name', 'equalto', 'ocaas-cluster-creds') | list | first | default({}) }}"
+
+    - name: Extract credential ID
+      ansible.builtin.set_fact:
+        target_credential_id: "{{ target_credential.id | default(None) if (target_credential is defined and target_credential != {}) else None }}"
+
+    - name: Debug - Show credential ID
+      ansible.builtin.debug:
+        msg: "Found credential ID: {{ target_credential_id }}"
+
+    - name: Warn if credential not found
+      ansible.builtin.debug:
+        msg: "WARNING: Credential 'ocaas-cluster-creds' not found. Job templates will be created without credentials."
+      when: target_credential_id is not defined or target_credential_id == None
 
     - name: Get all job templates
       ansible.builtin.uri:

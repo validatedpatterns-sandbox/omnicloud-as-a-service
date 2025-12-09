@@ -195,6 +195,34 @@
       ansible.builtin.debug:
         msg: "Available inventories: {{ all_inventories.json.results | default([]) | map(attribute='name') | list }}, Available projects: {{ all_projects.json.results | default([]) | map(attribute='name') | list }}, Target inventory ID: {{ target_inventory_id }}, Target project ID: {{ target_project_id }}, Target credential ID: {{ target_credential_id }}"
 
+    - name: Sync ocaas-project to ensure playbooks are available
+      ansible.builtin.uri:
+        url: "https://{{ aap_hostname }}/api/controller/v2/projects/{{ target_project_id }}/update/"
+        method: POST
+        user: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        validate_certs: "{{ aap_validate_certs }}"
+        force_basic_auth: true
+        status_code: [200, 201, 202, 204]
+      register: project_sync_result
+      ignore_errors: true
+      failed_when: false
+
+    - name: Wait for project sync to complete
+      ansible.builtin.uri:
+        url: "https://{{ aap_hostname }}/api/controller/v2/projects/{{ target_project_id }}/"
+        method: GET
+        user: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        validate_certs: "{{ aap_validate_certs }}"
+        force_basic_auth: true
+      register: project_status
+      until: project_status.json.status == "successful"
+      retries: 30
+      delay: 2
+      ignore_errors: true
+      when: project_sync_result.status is defined and project_sync_result.status in [200, 201, 202, 204]
+
     - name: Create or update job templates for each cloud provider
       ansible.builtin.include_tasks: tasks/create-job-template-survey.yml
       loop: "{{ cloud_providers }}"

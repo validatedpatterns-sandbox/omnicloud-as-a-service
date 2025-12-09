@@ -117,7 +117,7 @@
         controller_password: "{{ aap_password }}"
         validate_certs: "{{ aap_validate_certs }}"
         name: "{{ job_template_name }}"
-        state: query
+        state: present
       register: existing_job_template
 
     - name: Fail if job template not found

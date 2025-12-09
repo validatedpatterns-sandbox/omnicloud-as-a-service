@@ -18,7 +18,13 @@
         aap_validate_certs: "{{ aap_validate_certs | default(false) }}"
         aap_username: "{{ aap_username | default('admin') }}"
         aap_password: "{{ aap_password | default(lookup('file', '/pattern-home/aap-admin-password/password') | default('admin')) }}"
-        job_template_name: "{{ job_template_name | default('ocaas-job') }}"
+        cloud_providers:
+          - name: "Amazon"
+            template_name: "OmniCloud - Amazon Template"
+          - name: "Azure"
+            template_name: "OmniCloud - Azure Template"
+          - name: "Google"
+            template_name: "OmniCloud - Google Template"
 
     - name: Wait for Automation Controller to be ready
       ansible.builtin.uri:
@@ -48,7 +54,7 @@
             variable: "cluster_clusterGroup_input"
             required: true
             type: "text"
-            default: ""
+            default: "devops"
           - question_name: "Base Domain"
             question_description: "Base domain for the cluster"
             variable: "cluster_baseDomain_input"
@@ -61,9 +67,9 @@
             required: true
             type: "multiplechoice"
             choices:
-              - "aws"
-              - "azure"
-              - "gcp"
+              - "Amazon"
+              - "Azure"
+              - "Google"
             default: ""
           - question_name: "Cloud Region"
             question_description: "Region for cloud deployment"
@@ -115,6 +121,31 @@
           description: "Cluster deployment configuration survey"
           spec: "{{ survey_questions }}"
 
+    - name: Get all inventories
+      ansible.builtin.uri:
+        url: "https://{{ aap_hostname }}/api/controller/v2/inventories/"
+        method: GET
+        user: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        validate_certs: "{{ aap_validate_certs }}"
+        force_basic_auth: true
+      register: all_inventories
+
+    - name: Get all projects
+      ansible.builtin.uri:
+        url: "https://{{ aap_hostname }}/api/controller/v2/projects/"
+        method: GET
+        user: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        validate_certs: "{{ aap_validate_certs }}"
+        force_basic_auth: true
+      register: all_projects
+
+    - name: Set default inventory and project IDs
+      ansible.builtin.set_fact:
+        default_inventory_id: "{{ all_inventories.json.results[0].id | default(1) }}"
+        default_project_id: "{{ all_projects.json.results[0].id | default(6) }}"
+
     - name: Get all job templates
       ansible.builtin.uri:
         url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/"
@@ -125,111 +156,101 @@
         force_basic_auth: true
       register: all_job_templates
 
-    - name: Find job template by name
-      ansible.builtin.set_fact:
-        matching_templates: "{{ all_job_templates.json.results | default([]) | selectattr('name', 'equalto', job_template_name) | list }}"
-
-    - name: Set job template to use (use specified name or fallback to first available)
-      ansible.builtin.set_fact:
-        job_template_exists: "{{ matching_templates | length > 0 }}"
-        job_template_to_use: "{{ matching_templates[0] if matching_templates | length > 0 else (all_job_templates.json.results | default([]) | first) }}"
-        actual_template_name: "{{ (matching_templates[0].name if matching_templates | length > 0 else (all_job_templates.json.results | default([]) | first).name) | default(job_template_name) }}"
-
-    - name: Set job template ID
-      ansible.builtin.set_fact:
-        job_template_id: "{{ job_template_to_use.id }}"
-      when: job_template_to_use is defined
-
-    - name: Display template selection
+    - name: Display available resources
       ansible.builtin.debug:
-        msg: "Using job template: '{{ actual_template_name }}' (ID: {{ job_template_id }}){% if not job_template_exists %}. Note: Requested template '{{ job_template_name }}' not found, using first available template.{% endif %}"
+        msg: "Available inventories: {{ all_inventories.json.results | default([]) | map(attribute='name') | list }}, Available projects: {{ all_projects.json.results | default([]) | map(attribute='name') | list }}"
 
-    - name: Display all available job templates
-      ansible.builtin.debug:
-        msg: "Available job templates: {{ all_job_templates.json.results | default([]) | map(attribute='name') | list }}"
+    - name: Create or update job templates for each cloud provider
+      block:
+        - name: Check if job template exists
+          ansible.builtin.set_fact:
+            existing_template: "{{ all_job_templates.json.results | default([]) | selectattr('name', 'equalto', item.template_name) | list | first }}"
 
-    - name: Fail if no job templates available
-      ansible.builtin.fail:
-        msg: "No job templates found in AAP. Cannot create survey."
-      when: all_job_templates.json.results | default([]) | length == 0
+        - name: Create job template if it doesn't exist
+          ansible.builtin.uri:
+            url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/"
+            method: POST
+            user: "{{ aap_username }}"
+            password: "{{ aap_password }}"
+            validate_certs: "{{ aap_validate_certs }}"
+            force_basic_auth: true
+            body_format: json
+            body:
+              name: "{{ item.template_name }}"
+              description: "Job template for {{ item.name }} cloud provider deployments"
+              inventory: "{{ default_inventory_id }}"
+              project: "{{ default_project_id }}"
+              playbook: "{{ job_template_playbook | default('hello_world.yml') }}"
+              job_type: "run"
+          register: create_template_result
+          when: existing_template is not defined or existing_template == {}
+          ignore_errors: true
 
-    - name: Enable survey on job template
-      ansible.builtin.uri:
-        url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ job_template_id }}/"
-        method: PATCH
-        user: "{{ aap_username }}"
-        password: "{{ aap_password }}"
-        validate_certs: "{{ aap_validate_certs }}"
-        force_basic_auth: true
-        body_format: json
-        body:
-          survey_enabled: true
-      register: enable_survey_result
-      when: job_template_id is defined
+        - name: Refresh job templates list after creation
+          ansible.builtin.uri:
+            url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/?name={{ item.template_name }}"
+            method: GET
+            user: "{{ aap_username }}"
+            password: "{{ aap_password }}"
+            validate_certs: "{{ aap_validate_certs }}"
+            force_basic_auth: true
+          register: refreshed_template
+          when: existing_template is not defined or existing_template == {}
 
-    - name: Debug survey spec before sending
-      ansible.builtin.debug:
-        var: survey_spec
-      when: survey_spec is defined
+        - name: Get job template ID (use existing or newly created)
+          ansible.builtin.set_fact:
+            template_id: "{{ (existing_template.id if (existing_template is defined and existing_template != {}) else (refreshed_template.json.results[0].id if (refreshed_template is defined and refreshed_template.json.results | length > 0) else (create_template_result.json.id | default(None)))) | default(existing_template.id) }}"
 
-    - name: Set survey spec on job template
-      ansible.builtin.uri:
-        url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ job_template_id }}/survey_spec/"
-        method: POST
-        user: "{{ aap_username }}"
-        password: "{{ aap_password }}"
-        validate_certs: "{{ aap_validate_certs }}"
-        force_basic_auth: true
-        body_format: json
-        body: "{{ survey_spec }}"
-      register: job_template_result
-      when: job_template_id is defined
-      ignore_errors: true
-      failed_when: false
+        - name: Fail if template ID cannot be determined
+          ansible.builtin.fail:
+            msg: "Could not determine template ID for '{{ item.template_name }}'. Template may not exist and creation may have failed."
+          when: template_id is not defined or template_id == None
 
-    - name: Debug API response
-      ansible.builtin.debug:
-        var: job_template_result
-      when: job_template_result is defined
+        - name: Enable survey on job template
+          ansible.builtin.uri:
+            url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
+            method: PATCH
+            user: "{{ aap_username }}"
+            password: "{{ aap_password }}"
+            validate_certs: "{{ aap_validate_certs }}"
+            force_basic_auth: true
+            body_format: json
+            body:
+              survey_enabled: true
+          register: enable_survey_result
 
-    - name: Debug survey spec API response
-      ansible.builtin.debug:
-        var: job_template_result
-      when: job_template_result is defined
+        - name: Set survey spec on job template
+          ansible.builtin.uri:
+            url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/survey_spec/"
+            method: POST
+            user: "{{ aap_username }}"
+            password: "{{ aap_password }}"
+            validate_certs: "{{ aap_validate_certs }}"
+            force_basic_auth: true
+            body_format: json
+            body: "{{ survey_spec }}"
+          register: survey_result
+          ignore_errors: true
+          failed_when: false
 
-    - name: Check if survey spec API call failed
-      ansible.builtin.fail:
-        msg: "Failed to set survey spec. Status: {{ job_template_result.status | default('unknown') }}, Response: {{ job_template_result.json | default(job_template_result.msg) | to_nice_json }}"
-      when: job_template_result is defined and job_template_result.status not in [200, 201, 202, 204]
+        - name: Check if survey spec API call failed
+          ansible.builtin.fail:
+            msg: "Failed to set survey spec for '{{ item.template_name }}'. Status: {{ survey_result.status | default('unknown') }}, Response: {{ survey_result.json | default(survey_result.msg) | to_nice_json }}"
+          when: survey_result.status is defined and survey_result.status not in [200, 201, 202, 204]
 
-    - name: Get survey spec to verify
-      ansible.builtin.uri:
-        url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ job_template_id }}/survey_spec/"
-        method: GET
-        user: "{{ aap_username }}"
-        password: "{{ aap_password }}"
-        validate_certs: "{{ aap_validate_certs }}"
-        force_basic_auth: true
-      register: verify_survey_spec
-      when: job_template_result is defined and job_template_result.status in [200, 201, 202, 204]
+        - name: Verify survey was created
+          ansible.builtin.uri:
+            url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
+            method: GET
+            user: "{{ aap_username }}"
+            password: "{{ aap_password }}"
+            validate_certs: "{{ aap_validate_certs }}"
+            force_basic_auth: true
+          register: verify_template
 
-    - name: Verify survey was created
-      ansible.builtin.uri:
-        url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ job_template_id }}/"
-        method: GET
-        user: "{{ aap_username }}"
-        password: "{{ aap_password }}"
-        validate_certs: "{{ aap_validate_certs }}"
-        force_basic_auth: true
-      register: verify_template
-      when: job_template_result is defined and job_template_result.status in [200, 201, 202, 204]
-
-    - name: Display survey verification
-      ansible.builtin.debug:
-        msg: "Survey enabled: {{ verify_template.json.survey_enabled | default('not set') }}, Survey spec count: {{ verify_survey_spec.json | default([]) | length }}"
-      when: verify_template is defined and verify_survey_spec is defined
-
-    - name: Display survey creation result
-      ansible.builtin.debug:
-        msg: "Survey created/updated successfully for job template '{{ actual_template_name }}' (ID: {{ job_template_id }})"
-      when: job_template_result is defined and job_template_result.status in [200, 201, 202, 204]
+        - name: Display survey creation result
+          ansible.builtin.debug:
+            msg: "Survey created/updated successfully for job template '{{ item.template_name }}' (ID: {{ template_id }}). Survey enabled: {{ verify_template.json.survey_enabled | default('not set') }}"
+      loop: "{{ cloud_providers }}"
+      loop_control:
+        label: "{{ item.template_name }}"

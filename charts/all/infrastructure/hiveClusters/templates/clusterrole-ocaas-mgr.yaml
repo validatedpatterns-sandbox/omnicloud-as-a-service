@@ -1,0 +1,159 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ocaas-mgr
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+rules:
+# Hive cluster lifecycle management
+- apiGroups:
+  - hive.openshift.io
+  resources:
+  - clusterdeployments
+  - clusterprovisions
+  - clusterdeprovisions
+  - clusterstates
+  - clusterrelocates
+  - clusterpools
+  - clusterpoolclaims
+  - clusterimagesets
+  - checkpoints
+  - dnszones
+  - machinepools
+  - selectorsyncidentityproviders
+  - selectorsyncsets
+  - syncidentityproviders
+  - syncsets
+  - syncsetinstances
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+  - deletecollection
+
+# Hypershift cluster lifecycle management
+- apiGroups:
+  - hypershift.openshift.io
+  resources:
+  - hostedclusters
+  - hostedclusters/status
+  - nodepools
+  - nodepools/status
+  - hostedcontrolplanes
+  - hostedcontrolplanes/status
+  - machineconfigservers
+  - machineconfigservers/status
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+  - deletecollection
+
+# Core Kubernetes resources needed for cluster management
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  - secrets
+  - configmaps
+  - serviceaccounts
+  - services
+  - endpoints
+  - pods
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+
+# RBAC for cluster management
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - roles
+  - rolebindings
+  - clusterroles
+  - clusterrolebindings
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+
+# Machine API for node management
+- apiGroups:
+  - machine.openshift.io
+  resources:
+  - machines
+  - machinesets
+  - machineautoscalers
+  - machinehealthchecks
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+
+# Cluster API for cluster management
+- apiGroups:
+  - cluster.x-k8s.io
+  resources:
+  - clusters
+  - machinedeployments
+  - machinepools
+  - machines
+  - machinesets
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+
+# OpenShift cluster management
+- apiGroups:
+  - config.openshift.io
+  resources:
+  - "*"
+  verbs:
+  - get
+  - list
+  - watch
+
+# ServiceAccount tokens for authentication
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts/token
+  verbs:
+  - create
+
+# Events for monitoring
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch

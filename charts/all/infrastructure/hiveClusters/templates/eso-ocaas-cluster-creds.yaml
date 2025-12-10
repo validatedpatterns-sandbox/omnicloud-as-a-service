@@ -1,0 +1,53 @@
+---
+# ExternalSecret that creates the ocaas-cluster-creds secret for AAP
+# This secret contains the API endpoint, bearer token, and verify_ssl flag
+# needed for the OpenShift/Kubernetes API Bearer Token credential in AAP.
+#
+# The bearer_token is extracted from the ocaas-mgr-token secret (created by Kubernetes).
+# The api_endpoint and verify_ssl are pulled from Vault.
+#
+# Vault must contain the following at the path specified in values.yaml:
+#   api_endpoint: https://api.example.com:6443 (or your cluster's API server URL)
+#   verify_ssl: "false" (or "true" if SSL verification is required)
+apiVersion: "external-secrets.io/v1beta1"
+kind: ExternalSecret
+metadata:
+  name: eso-ocaas-cluster-creds
+  namespace: hive
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: {{ .Values.secretStore.name }}
+    kind: {{ .Values.secretStore.kind }}
+  target:
+    name: ocaas-cluster-creds
+    namespace: ansible-automation-platform
+    creationPolicy: Owner
+    template:
+      type: Opaque
+      data:
+        # Use 'host' to match AAP credential input key, but also include 'api_endpoint' for backward compatibility
+        host: "{{ .Secret.api_endpoint | b64enc }}"
+        api_endpoint: "{{ .Secret.api_endpoint | b64enc }}"
+        bearer_token: "{{ .Secret.token | b64enc }}"
+        verify_ssl: "{{ .Secret.verify_ssl | default \"false\" | b64enc }}"
+  dataFrom:
+  # Get bearer_token from the ocaas-mgr-token secret
+  # Kubernetes will automatically populate this secret with the service account token
+  - find:
+      name:
+        regexp: ocaas-mgr-token
+      type: Opaque
+  data:
+  # Get api_endpoint and verify_ssl from Vault
+  - secretKey: api_endpoint
+    remoteRef:
+      key: {{ .Values.ocaasClusterCreds.key | default "secret/data/hub/ocaas-cluster-creds" }}
+      property: api_endpoint
+  - secretKey: verify_ssl
+    remoteRef:
+      key: {{ .Values.ocaasClusterCreds.key | default "secret/data/hub/ocaas-cluster-creds" }}
+      property: verify_ssl
+      defaultValue: "false"

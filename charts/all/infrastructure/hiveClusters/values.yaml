@@ -14,3 +14,6 @@ azureCreds:
 
 gcpCreds:
   key: secret/data/hub/gcp
+
+ocaasClusterCreds:
+  key: secret/data/hub/ocaas-cluster-creds

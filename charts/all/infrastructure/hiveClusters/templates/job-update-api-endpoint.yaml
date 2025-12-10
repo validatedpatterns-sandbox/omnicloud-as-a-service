@@ -1,18 +1,16 @@
 ---
 # Job that reads the API server URL from the Infrastructure cluster resource
 # and stores it in a ConfigMap for ExternalSecret to consume.
-# This runs as a PreSync hook before ArgoCD syncs to ensure the API endpoint
-# is always up-to-date. If you need periodic updates, consider converting this
-# to a CronJob instead.
+# This runs after the ServiceAccount, ClusterRole, and ClusterRoleBinding are created
+# to ensure the API endpoint is available for the ExternalSecret.
+# If you need periodic updates, consider converting this to a CronJob instead.
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: update-api-endpoint
   namespace: hive
   annotations:
-    argocd.argoproj.io/sync-wave: "1"
-    argocd.argoproj.io/hook: PreSync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   ttlSecondsAfterFinished: 300
   template:

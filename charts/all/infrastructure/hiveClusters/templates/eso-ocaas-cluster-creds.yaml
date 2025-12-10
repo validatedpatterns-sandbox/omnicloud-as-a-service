@@ -32,7 +32,7 @@ spec:
         host: "{{ .Secret.api_endpoint | b64enc }}"
         api_endpoint: "{{ .Secret.api_endpoint | b64enc }}"
         bearer_token: "{{ .Secret.token | b64enc }}"
-        verify_ssl: "{{ .Secret.verify_ssl | default \"false\" | b64enc }}"
+        verify_ssl: "{{ .Secret.verify_ssl | default "false" | b64enc }}"
   dataFrom:
   # Get bearer_token from the ocaas-mgr-token secret
   # Kubernetes will automatically populate this secret with the service account token

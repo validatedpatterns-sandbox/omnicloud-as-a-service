@@ -85,6 +85,11 @@
             question_description: "Number of control plane replicas"
             variable: "mp_controlPlane_replicas_input"
             required: true
+            type: "multiplechoice"
+            choices:
+              - "1"
+              - "3"
+            default: "1"
             type: "integer"
             default: 3
           - question_name: "Control Plane Machine Type"
@@ -96,13 +101,13 @@
           - question_name: "Worker Replicas"
             question_description: "Number of worker replicas"
             variable: "mp_workers_replicas_input"
-            required: true
+            required: false
             type: "integer"
-            default: 3
+            default: 0
           - question_name: "Worker Machine Type"
             question_description: "Machine type for worker nodes"
             variable: "mp_workers_machineType_input"
-            required: true
+            required: false
             type: "text"
             default: ""
           - question_name: "Azure Resource Group"
@@ -110,13 +115,13 @@
             variable: "cc_azure_resourceGroup_input"
             required: false
             type: "text"
-            default: ""
+            default: "null"
           - question_name: "GCP Project ID"
             question_description: "GCP project ID (required for GCP)"
             variable: "cc_gcp_projectID_input"
             required: false
             type: "text"
-            default: ""
+            default: "null"
 
     - name: Build survey spec with description
       ansible.builtin.set_fact:

@@ -1,0 +1,12 @@
+---
+# ConfigMap that will be populated by the update-api-endpoint Job
+# This provides a fallback/default value if the Job hasn't run yet
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ocaas-cluster-api-endpoint
+  namespace: hive
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+data:
+  api_endpoint: ""  # Will be populated by the Job

@@ -140,6 +140,15 @@ rules:
   - get
   - list
   - watch
+# Infrastructure resource for API endpoint discovery
+- apiGroups:
+  - config.openshift.io
+  resources:
+  - infrastructures
+  verbs:
+  - get
+  - list
+  - watch
 
 # ServiceAccount tokens for authentication
 - apiGroups:

@@ -1,0 +1,49 @@
+---
+# Job that reads the API server URL from the Infrastructure cluster resource
+# and stores it in a ConfigMap for ExternalSecret to consume.
+# This runs as a PreSync hook before ArgoCD syncs to ensure the API endpoint
+# is always up-to-date. If you need periodic updates, consider converting this
+# to a CronJob instead.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: update-api-endpoint
+  namespace: hive
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      serviceAccountName: ocaas-mgr
+      restartPolicy: OnFailure
+      containers:
+      - name: update-endpoint
+        image: registry.redhat.io/openshift4/ose-cli:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          API_URL=$(oc get infrastructure cluster -o jsonpath='{.status.apiServerURL}')
+          if [ -z "$API_URL" ]; then
+            echo "Error: Could not retrieve API server URL from Infrastructure resource"
+            exit 1
+          fi
+          
+          # Create or update ConfigMap with API endpoint
+          oc create configmap ocaas-cluster-api-endpoint \
+            --from-literal=api_endpoint="$API_URL" \
+            --dry-run=client -o yaml | oc apply -f -
+          
+          echo "Successfully updated ConfigMap with API endpoint: $API_URL"
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault

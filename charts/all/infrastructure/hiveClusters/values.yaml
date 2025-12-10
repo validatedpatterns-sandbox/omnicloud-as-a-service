@@ -16,4 +16,6 @@ gcpCreds:
   key: secret/data/hub/gcp
 
 ocaasClusterCreds:
+  # Vault key for verify_ssl override (optional, defaults to "false")
+  # Set verify_ssl: "true" in Vault at this path to enable SSL verification
   key: secret/data/hub/ocaas-cluster-creds

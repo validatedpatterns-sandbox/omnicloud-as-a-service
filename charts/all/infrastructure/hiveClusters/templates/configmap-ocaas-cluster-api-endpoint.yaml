@@ -10,3 +10,4 @@ metadata:
     argocd.argoproj.io/sync-wave: "1"
 data:
   api_endpoint: ""  # Will be populated by the Job
+  verify_ssl: "false"  # Default value, can be overridden by updating this ConfigMap

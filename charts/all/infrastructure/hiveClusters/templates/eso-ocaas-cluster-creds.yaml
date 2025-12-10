@@ -4,11 +4,9 @@
 # needed for the OpenShift/Kubernetes API Bearer Token credential in AAP.
 #
 # The bearer_token is extracted from the ocaas-mgr-token secret (created by Kubernetes).
-# The api_endpoint is read from the ocaas-cluster-api-endpoint ConfigMap (populated by Job).
-# The verify_ssl defaults to "false" but can be overridden via Vault.
-#
-# To override verify_ssl, set it in Vault at the path specified in values.yaml:
-#   verify_ssl: "true" (if SSL verification is required)
+# The api_endpoint and verify_ssl are read from the ocaas-cluster-api-endpoint ConfigMap.
+# verify_ssl defaults to "false" but can be overridden by updating the ConfigMap:
+#   kubectl patch configmap ocaas-cluster-api-endpoint -n hive --type merge -p '{"data":{"verify_ssl":"true"}}'
 apiVersion: "external-secrets.io/v1beta1"
 kind: ExternalSecret
 metadata:
@@ -41,15 +39,8 @@ spec:
       name:
         regexp: ocaas-mgr-token
       type: Opaque
-  # Get api_endpoint from the ConfigMap (populated by update-api-endpoint Job)
+  # Get api_endpoint and verify_ssl from the ConfigMap (populated by update-api-endpoint Job)
   - find:
       name:
         regexp: ocaas-cluster-api-endpoint
       type: ConfigMap
-  data:
-  # Get verify_ssl from Vault (optional override, defaults to "false")
-  - secretKey: verify_ssl
-    remoteRef:
-      key: {{ .Values.ocaasClusterCreds.key | default "secret/data/hub/ocaas-cluster-creds" }}
-      property: verify_ssl
-      defaultValue: "false"

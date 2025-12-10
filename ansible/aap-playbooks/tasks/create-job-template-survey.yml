@@ -1,0 +1,335 @@
+---
+- name: Check if job template exists
+  ansible.builtin.set_fact:
+    existing_template: "{{ all_job_templates.json.results | default([]) | selectattr('name', 'equalto', item.template_name) | list | first | default({}) }}"
+
+- name: Create job template if it doesn't exist
+  ansible.builtin.uri:
+    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/"
+    method: POST
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    validate_certs: "{{ aap_validate_certs }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      name: "{{ item.template_name }}"
+      description: "Job template for {{ item.name }} cloud provider deployments"
+      inventory: "{{ target_inventory_id }}"
+      project: "{{ target_project_id }}"
+      playbook: "ansible/site.yaml"
+      job_type: "run"
+      execution_environment: "{{ default_execution_environment_id }}"
+    status_code: [200, 201]
+  register: create_template_result
+  when:
+    - existing_template is not defined or existing_template == {}
+    - default_execution_environment_id is defined and default_execution_environment_id != None
+  ignore_errors: true
+  failed_when: false
+
+- name: Try creating template with fallback playbook if ansible/site.yaml doesn't exist
+  ansible.builtin.uri:
+    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/"
+    method: POST
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    validate_certs: "{{ aap_validate_certs }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      name: "{{ item.template_name }}"
+      description: "Job template for {{ item.name }} cloud provider deployments"
+      inventory: "{{ target_inventory_id }}"
+      project: "{{ target_project_id }}"
+      playbook: "{{ fallback_playbook }}"
+      job_type: "run"
+      execution_environment: "{{ default_execution_environment_id }}"
+    status_code: [200, 201]
+  register: create_template_fallback_result
+  loop:
+    - "hello_world.yml"
+    - "site.yaml"
+  loop_control:
+    loop_var: fallback_playbook
+    label: "Trying playbook: {{ fallback_playbook }}"
+  when:
+    - existing_template is not defined or existing_template == {}
+    - create_template_result.status is not defined or create_template_result.status not in [200, 201]
+    - "'playbook' in (create_template_result.json | default({}) | to_json | lower)"
+    - default_execution_environment_id is defined and default_execution_environment_id != None
+  ignore_errors: true
+  failed_when: false
+
+- name: Set successful creation result from fallback attempts
+  ansible.builtin.set_fact:
+    create_template_result: "{{ fallback_item }}"
+  loop: "{{ create_template_fallback_result.results | default([]) }}"
+  loop_control:
+    loop_var: fallback_item
+    label: "Using fallback result with playbook: {{ fallback_item.item | default('unknown') }}"
+  when:
+    - existing_template is not defined or existing_template == {}
+    - create_template_result.status is not defined or create_template_result.status not in [200, 201]
+    - fallback_item.status is defined
+    - fallback_item.status in [200, 201]
+
+- name: Display template creation result
+  ansible.builtin.debug:
+    msg: "Template creation result - Status: {{ create_template_result.status | default('unknown') }}, Response: {{ create_template_result.json | default(create_template_result.msg) | default('unknown') | to_nice_json }}"
+  when:
+    - existing_template is not defined or existing_template == {}
+    - create_template_result.status is not defined or create_template_result.status not in [200, 201]
+
+- name: Refresh job templates list if creation may have succeeded
+  ansible.builtin.uri:
+    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/?name={{ item.template_name | urlencode }}"
+    method: GET
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    validate_certs: "{{ aap_validate_certs }}"
+    force_basic_auth: true
+  register: refreshed_templates
+  when:
+    - existing_template is not defined or existing_template == {}
+    - create_template_result.status is not defined or create_template_result.status not in [200, 201]
+
+- name: Get job template ID (use existing, newly created, or refreshed)
+  ansible.builtin.set_fact:
+    template_id: "{{ existing_template.id if (existing_template is defined and existing_template != {}) else (create_template_result.json.id if (create_template_result.status is defined and create_template_result.status in [200, 201]) else (refreshed_templates.json.results[0].id if (refreshed_templates is defined and refreshed_templates.json.results | length > 0) else None)) }}"
+
+- name: Fail if template ID cannot be determined
+  ansible.builtin.fail:
+    msg: "Could not determine template ID for '{{ item.template_name }}'. Template may not exist and creation may have failed. Creation status: {{ create_template_result.status | default('unknown') }}, Creation response: {{ create_template_result.json | default(create_template_result.msg) | default('unknown') }}"
+  when: template_id is not defined or template_id == None
+
+- name: Display template update information
+  ansible.builtin.debug:
+    msg: "Updating job template '{{ item.template_name }}' (ID: {{ template_id }}) with inventory={{ target_inventory_id }}, project={{ target_project_id }}, playbook=ansible/site.yaml, credentials={{ [target_credential_id] if (target_credential_id is defined and target_credential_id != None) else [] }}"
+
+- name: Get current job template state (refresh after potential creation)
+  ansible.builtin.uri:
+    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
+    method: GET
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    validate_certs: "{{ aap_validate_certs }}"
+    force_basic_auth: true
+  register: current_template
+  when: template_id is defined and template_id != None
+
+- name: Display current template state
+  ansible.builtin.debug:
+    msg: "Current state - Inventory: {{ current_template.json.inventory | default('not set') }}, Project: {{ current_template.json.project | default('not set') }}, Playbook: {{ current_template.json.playbook | default('not set') }}, Credentials: {{ current_template.json.summary_fields.credentials | default([]) | map(attribute='id') | list }}"
+  when: current_template is defined
+
+- name: Check if project is changing
+  ansible.builtin.set_fact:
+    project_is_changing: "{{ current_template.json.project | default(0) | int != target_project_id | int }}"
+  when: current_template is defined
+
+- name: Get current credentials for template
+  ansible.builtin.uri:
+    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/credentials/"
+    method: GET
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    validate_certs: "{{ aap_validate_certs }}"
+    force_basic_auth: true
+  register: current_credentials
+  failed_when: false
+  when: template_id is defined and template_id != None
+
+- name: Check if target credential is already associated
+  ansible.builtin.set_fact:
+    credential_already_associated: "{{ target_credential_id in (current_credentials.json.results | default([]) | map(attribute='id') | list) }}"
+  when:
+    - template_id is defined and template_id != None
+    - target_credential_id is defined and target_credential_id != None
+
+- name: Associate credential with job template if not already associated
+  ansible.builtin.uri:
+    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/credentials/"
+    method: POST
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    validate_certs: "{{ aap_validate_certs }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      id: "{{ target_credential_id }}"
+    status_code: [200, 201, 202, 204]
+  register: associate_credential_result
+  when:
+    - template_id is defined and template_id != None
+    - target_credential_id is defined and target_credential_id != None
+    - credential_already_associated | default(false) == false
+  ignore_errors: true
+  failed_when: false
+
+- name: Build update body with execution environment if available
+  ansible.builtin.set_fact:
+    update_body:
+      name: "{{ current_template.json.name }}"
+      description: "{{ current_template.json.description | default('Job template for ' + item.name + ' cloud provider deployments') }}"
+      inventory: "{{ target_inventory_id }}"
+      project: "{{ target_project_id }}"
+      playbook: "ansible/site.yaml"
+      job_type: "{{ current_template.json.job_type | default('run') }}"
+      survey_enabled: "{{ current_template.json.survey_enabled | default(true) }}"
+    update_body_with_ee:
+      name: "{{ current_template.json.name }}"
+      description: "{{ current_template.json.description | default('Job template for ' + item.name + ' cloud provider deployments') }}"
+      inventory: "{{ target_inventory_id }}"
+      project: "{{ target_project_id }}"
+      playbook: "ansible/site.yaml"
+      job_type: "{{ current_template.json.job_type | default('run') }}"
+      survey_enabled: "{{ current_template.json.survey_enabled | default(true) }}"
+      execution_environment: "{{ default_execution_environment_id }}"
+
+- name: Update job template with all required settings (including execution environment)
+  ansible.builtin.uri:
+    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
+    method: PUT
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    validate_certs: "{{ aap_validate_certs }}"
+    force_basic_auth: true
+    body_format: json
+    body: "{{ update_body_with_ee if (default_execution_environment_id is defined and default_execution_environment_id != None) else update_body }}"
+    status_code: [200, 201, 202, 204]
+  register: update_template_result
+  ignore_errors: true
+  failed_when: false
+
+- name: Display update result for inventory/project
+  ansible.builtin.debug:
+    msg: "Inventory/Project update - Status: {{ update_template_result.status | default('unknown') }}, Response: {{ update_template_result.json | default(update_template_result.msg) | default('unknown') | to_nice_json }}"
+  when: update_template_result.status is not defined or update_template_result.status not in [200, 201, 202, 204]
+
+- name: Verify playbook was set correctly
+  ansible.builtin.debug:
+    msg: "Playbook update result - Status: {{ update_template_result.status | default('unknown') }}, Playbook in response: {{ update_template_result.json.playbook | default('not set') if update_template_result.json is defined else 'unknown' }}"
+  when: update_template_result.status is defined and update_template_result.status in [200, 201, 202, 204]
+
+- name: Update execution environment separately to ensure it's set
+  ansible.builtin.uri:
+    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
+    method: PATCH
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    validate_certs: "{{ aap_validate_certs }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      execution_environment: "{{ default_execution_environment_id }}"
+    status_code: [200, 201, 202, 204]
+  register: update_ee_result
+  when:
+    - template_id is defined and template_id != None
+    - default_execution_environment_id is defined and default_execution_environment_id != None
+  ignore_errors: true
+  failed_when: false
+
+- name: Display execution environment update result
+  ansible.builtin.debug:
+    msg: "Execution environment update - Status: {{ update_ee_result.status | default('unknown') }}, Response: {{ update_ee_result.json | default(update_ee_result.msg) | default('unknown') }}"
+  when:
+    - update_ee_result is defined
+    - update_ee_result.status is not defined or update_ee_result.status not in [200, 201, 202, 204]
+
+- name: Try to update playbook if PUT didn't set it correctly
+  ansible.builtin.uri:
+    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
+    method: PATCH
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    validate_certs: "{{ aap_validate_certs }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      playbook: "ansible/site.yaml"
+    status_code: [200, 201, 202, 204]
+  register: update_playbook_result
+  when: update_template_result.status is not defined or update_template_result.status not in [200, 201, 202, 204]
+  ignore_errors: true
+  failed_when: false
+
+- name: Display playbook update result
+  ansible.builtin.debug:
+    msg: "Playbook update - Status: {{ update_playbook_result.status | default('unknown') }}, Response: {{ update_playbook_result.json | default(update_playbook_result.msg) | default('unknown') | to_nice_json }}"
+  when:
+    - update_playbook_result is defined
+    - update_playbook_result.status is not defined or update_playbook_result.status not in [200, 201, 202, 204]
+
+- name: Verify template was updated
+  ansible.builtin.uri:
+    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
+    method: GET
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    validate_certs: "{{ aap_validate_certs }}"
+    force_basic_auth: true
+  register: updated_template
+
+- name: Get project name for verification
+  ansible.builtin.set_fact:
+    updated_project_name: "{{ updated_template.json.summary_fields.project.name | default('unknown') }}"
+    updated_inventory_name: "{{ updated_template.json.summary_fields.inventory.name | default('unknown') }}"
+
+- name: Display updated template state
+  ansible.builtin.debug:
+    msg: "Updated state - Inventory: {{ updated_inventory_name }} (ID: {{ updated_template.json.inventory | default('not set') }}, expected ID: {{ target_inventory_id }}), Project: {{ updated_project_name }} (ID: {{ updated_template.json.project | default('not set') }}, expected ID: {{ target_project_id }}), Playbook: {{ updated_template.json.playbook | default('not set') }}, Credentials: {{ updated_template.json.summary_fields.credentials | default([]) | map(attribute='name') | list }}"
+
+- name: Warn if project doesn't match
+  ansible.builtin.debug:
+    msg: "WARNING: Template '{{ item.template_name }}' project is '{{ updated_project_name }}' but expected 'ocaas-project'. Project ID is {{ updated_template.json.project }} but expected {{ target_project_id }}."
+  when: updated_project_name != 'ocaas-project'
+
+
+- name: Enable survey on job template
+  ansible.builtin.uri:
+    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
+    method: PATCH
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    validate_certs: "{{ aap_validate_certs }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      survey_enabled: true
+    status_code: [200, 201, 202, 204]
+  register: enable_survey_result
+
+- name: Set survey spec on job template
+  ansible.builtin.uri:
+    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/survey_spec/"
+    method: POST
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    validate_certs: "{{ aap_validate_certs }}"
+    force_basic_auth: true
+    body_format: json
+    body: "{{ survey_spec }}"
+  register: survey_result
+  ignore_errors: true
+  failed_when: false
+
+- name: Check if survey spec API call failed
+  ansible.builtin.fail:
+    msg: "Failed to set survey spec for '{{ item.template_name }}'. Status: {{ survey_result.status | default('unknown') }}, Response: {{ survey_result.json | default(survey_result.msg) | to_nice_json }}"
+  when: survey_result.status is defined and survey_result.status not in [200, 201, 202, 204]
+
+- name: Verify survey was created
+  ansible.builtin.uri:
+    url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/{{ template_id }}/"
+    method: GET
+    user: "{{ aap_username }}"
+    password: "{{ aap_password }}"
+    validate_certs: "{{ aap_validate_certs }}"
+    force_basic_auth: true
+  register: verify_template
+
+- name: Display survey creation result
+  ansible.builtin.debug:
+    msg: "Job template '{{ item.template_name }}' (ID: {{ template_id }}) updated successfully. Inventory: {{ verify_template.json.inventory | default('not set') }}, Project: {{ verify_template.json.project | default('not set') }}, Playbook: {{ verify_template.json.playbook | default('not set') }}, Credentials: {{ verify_template.json.summary_fields.credentials | default([]) | map(attribute='name') | list | default(['not set']) }}, Survey enabled: {{ verify_template.json.survey_enabled | default('not set') }}"

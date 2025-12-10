@@ -57,6 +57,7 @@
       cloudName: {{ cloudConfig.azure.cloudName | default('AzurePublicCloud')}}
       baseDomainResourceGroupName: {{ cloudConfig.azure.baseDomainResourceGroupName }}
       region: {{ cloud.region }}
+      outboundType: Loadbalancer
 {% else %}
     aws:
       region: {{ cloud.region }}

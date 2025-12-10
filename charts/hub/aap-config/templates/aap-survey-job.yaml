@@ -1,0 +1,66 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: aap-config-survey-job
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  parallelism: 1
+  completions: 1
+  backoffLimit: 99
+  template:
+    spec:
+      activeDeadlineSeconds: 600
+      restartPolicy: Never
+      serviceAccountName: {{ $.Values.serviceAccountName }}
+      volumes:
+        - name: scratch-space
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: aap-admin-password
+          secret:
+            secretName: aap-admin-password
+        - name: helm-values
+          configMap:
+            name: helm-values
+      initContainers:
+        - name: init
+          image: {{ .Values.configJob.image }}
+          imagePullPolicy: {{ $.Values.configJob.imagePullPolicy }}
+          env:
+            - name: HOME
+              value: /pattern-home
+          workingDir: /pattern-home
+          command:
+            - /bin/bash
+            - -c
+            - >
+              git clone --recurse-submodules --single-branch --branch "{{ .Values.global.targetRevision }}"
+              -- "{{ .Values.global.repoURL }}" /pattern-home/git
+          volumeMounts:
+            - name: scratch-space
+              mountPath: /pattern-home
+      containers:
+        - name: config
+          image: {{ .Values.configJob.image }}
+          imagePullPolicy: {{ $.Values.configJob.imagePullPolicy }}
+          env:
+            - name: HOME
+              value: /pattern-home
+          workingDir: /pattern-home/agof_repo
+          command:
+            - /bin/bash
+            - -c
+            - > 
+              ansible-playbook /pattern-home/git/ansible/aap-playbooks/create-survey.yml
+          volumeMounts:
+            - name: scratch-space
+              mountPath: /pattern-home
+            - name: aap-admin-password
+              mountPath: /pattern-home/aap-admin-password
+              readOnly: true
+            - name: helm-values
+              mountPath: /pattern-home/helm-values
+              readOnly: true
+

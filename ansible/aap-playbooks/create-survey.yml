@@ -1,0 +1,302 @@
+---
+- hosts: localhost
+  gather_facts: no
+
+  tasks:
+    - name: Read helm values
+      ansible.builtin.include_vars:
+        file: "/pattern-home/helm-values/values.yaml"
+
+    - name: Read vars file
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../vars.yml"
+
+    - name: Set AAP connection variables
+      no_log: true
+      ansible.builtin.set_fact:
+        aap_hostname: "{{ aap_hostname | default('aap-ansible-automation-platform.' + global.localClusterDomain) }}"
+        aap_validate_certs: "{{ aap_validate_certs | default(false) }}"
+        aap_username: "{{ aap_username | default('admin') }}"
+        aap_password: "{{ aap_password | default(lookup('file', '/pattern-home/aap-admin-password/password') | default('admin')) }}"
+        cloud_providers:
+          - name: "Amazon"
+            template_name: "OmniCloud - Amazon Template"
+          - name: "Azure"
+            template_name: "OmniCloud - Azure Template"
+          - name: "Google"
+            template_name: "OmniCloud - Google Template"
+
+    - name: Wait for Automation Controller to be ready
+      ansible.builtin.uri:
+        url: "https://{{ aap_hostname }}/api/controller/v2/ping/"
+        method: GET
+        user: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        validate_certs: "{{ aap_validate_certs }}"
+        force_basic_auth: true
+      register: ping_check
+      until: ping_check.status == 200
+      retries: 30
+      delay: 10
+      ignore_errors: true
+
+    - name: Create or update OpenShift cluster credential
+      ansible.builtin.include_tasks: tasks/create-cluster-credential.yml
+      when: openshift_create_credential | default(true)
+
+    - name: Build survey spec from vars.yml
+      ansible.builtin.set_fact:
+        survey_questions:
+          - question_name: "Cluster Name"
+            question_description: "Name of the cluster to deploy"
+            variable: "cluster_name_input"
+            required: true
+            type: "text"
+            default: ""
+          - question_name: "Cluster Group"
+            question_description: "Cluster group for application deployment"
+            variable: "cluster_clusterGroup_input"
+            required: true
+            type: "text"
+            default: "devops"
+          - question_name: "Base Domain"
+            question_description: "Base domain for the cluster"
+            variable: "cluster_baseDomain_input"
+            required: true
+            type: "text"
+            default: ""
+          - question_name: "Cloud Provider"
+            question_description: "Cloud provider (aws, azure, gcp)"
+            variable: "cloud_provider_input"
+            required: true
+            type: "multiplechoice"
+            choices:
+              - "Amazon"
+              - "Azure"
+              - "Google"
+            default: ""
+          - question_name: "Cloud Region"
+            question_description: "Region for cloud deployment"
+            variable: "cloud_region_input"
+            required: true
+            type: "text"
+            default: ""
+          - question_name: "Control Plane Replicas"
+            question_description: "Number of control plane replicas"
+            variable: "mp_controlPlane_replicas_input"
+            required: true
+            type: "integer"
+            default: 3
+          - question_name: "Control Plane Machine Type"
+            question_description: "Machine type for control plane nodes"
+            variable: "mp_controlPlane_machineType_input"
+            required: true
+            type: "text"
+            default: ""
+          - question_name: "Worker Replicas"
+            question_description: "Number of worker replicas"
+            variable: "mp_workers_replicas_input"
+            required: true
+            type: "integer"
+            default: 3
+          - question_name: "Worker Machine Type"
+            question_description: "Machine type for worker nodes"
+            variable: "mp_workers_machineType_input"
+            required: true
+            type: "text"
+            default: ""
+          - question_name: "Azure Resource Group"
+            question_description: "Azure resource group name (required for Azure)"
+            variable: "cc_azure_resourceGroup_input"
+            required: false
+            type: "text"
+            default: ""
+          - question_name: "GCP Project ID"
+            question_description: "GCP project ID (required for GCP)"
+            variable: "cc_gcp_projectID_input"
+            required: false
+            type: "text"
+            default: ""
+
+    - name: Build survey spec with description
+      ansible.builtin.set_fact:
+        survey_spec:
+          name: "Cluster Deployment Survey"
+          description: "Cluster deployment configuration survey"
+          spec: "{{ survey_questions }}"
+
+    - name: Get all inventories
+      ansible.builtin.uri:
+        url: "https://{{ aap_hostname }}/api/controller/v2/inventories/"
+        method: GET
+        user: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        validate_certs: "{{ aap_validate_certs }}"
+        force_basic_auth: true
+      register: all_inventories
+
+    - name: Get all projects
+      ansible.builtin.uri:
+        url: "https://{{ aap_hostname }}/api/controller/v2/projects/"
+        method: GET
+        user: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        validate_certs: "{{ aap_validate_certs }}"
+        force_basic_auth: true
+      register: all_projects
+
+    - name: Find ocaas-project
+      ansible.builtin.set_fact:
+        ocaas_project: "{{ all_projects.json.results | default([]) | selectattr('name', 'equalto', 'ocaas-project') | list | first | default({}) }}"
+
+    - name: Find base-inventory
+      ansible.builtin.set_fact:
+        base_inventory: "{{ all_inventories.json.results | default([]) | selectattr('name', 'equalto', 'base-inventory') | list | first | default({}) }}"
+
+    - name: Set inventory and project IDs
+      ansible.builtin.set_fact:
+        target_inventory_id: "{{ base_inventory.id }}"
+        target_project_id: "{{ ocaas_project.id }}"
+      when:
+        - base_inventory is defined
+        - base_inventory != {}
+        - ocaas_project is defined
+        - ocaas_project != {}
+
+    - name: Verify project and inventory selection
+      ansible.builtin.debug:
+        msg: "Selected project: {{ ocaas_project.name | default('NOT FOUND') }} (ID: {{ target_project_id }}), Selected inventory: {{ base_inventory.name | default('NOT FOUND') }} (ID: {{ target_inventory_id }})"
+
+    - name: Fail if ocaas-project not found
+      ansible.builtin.fail:
+        msg: "Project 'ocaas-project' not found! Available projects: {{ all_projects.json.results | default([]) | map(attribute='name') | list }}"
+      when: ocaas_project is not defined or ocaas_project == {}
+
+    - name: Get all credentials
+      ansible.builtin.uri:
+        url: "https://{{ aap_hostname }}/api/controller/v2/credentials/"
+        method: GET
+        user: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        validate_certs: "{{ aap_validate_certs }}"
+        force_basic_auth: true
+      register: all_credentials
+
+    - name: Debug - Show all credential names
+      ansible.builtin.debug:
+        msg: "Available credentials: {{ all_credentials.json.results | default([]) | map(attribute='name') | list }}"
+
+    - name: Set credential ID for ocaas-cluster-creds
+      ansible.builtin.set_fact:
+        target_credential: "{{ all_credentials.json.results | default([]) | selectattr('name', 'equalto', 'ocaas-cluster-creds') | list | first | default({}) }}"
+
+    - name: Extract credential ID
+      ansible.builtin.set_fact:
+        target_credential_id: "{{ target_credential.id | default(None) if (target_credential is defined and target_credential != {}) else None }}"
+
+    - name: Debug - Show credential ID
+      ansible.builtin.debug:
+        msg: "Found credential ID: {{ target_credential_id }}"
+
+    - name: Warn if credential not found
+      ansible.builtin.debug:
+        msg: "WARNING: Credential 'ocaas-cluster-creds' not found. Job templates will be created without credentials."
+      when: target_credential_id is not defined or target_credential_id == None
+
+    - name: Get all execution environments
+      ansible.builtin.uri:
+        url: "https://{{ aap_hostname }}/api/controller/v2/execution_environments/"
+        method: GET
+        user: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        validate_certs: "{{ aap_validate_certs }}"
+        force_basic_auth: true
+      register: all_execution_environments
+
+    - name: Find default execution environment
+      ansible.builtin.set_fact:
+        default_execution_environment: "{{ all_execution_environments.json.results | default([]) | selectattr('name', 'equalto', 'Default execution environment') | list | first | default(all_execution_environments.json.results | default([]) | selectattr('name', 'match', '.*[Dd]efault.*') | list | first | default(all_execution_environments.json.results[0] if (all_execution_environments.json.results | length > 0) else {})) }}"
+
+    - name: Set default execution environment ID
+      ansible.builtin.set_fact:
+        default_execution_environment_id: "{{ default_execution_environment.id | default(None) if (default_execution_environment is defined and default_execution_environment != {}) else None }}"
+
+    - name: Display execution environment info
+      ansible.builtin.debug:
+        msg: "Default execution environment: {{ default_execution_environment.name | default('NOT FOUND') }} (ID: {{ default_execution_environment_id }}). Available EEs: {{ all_execution_environments.json.results | default([]) | map(attribute='name') | list }}"
+
+    - name: Get all job templates
+      ansible.builtin.uri:
+        url: "https://{{ aap_hostname }}/api/controller/v2/job_templates/"
+        method: GET
+        user: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        validate_certs: "{{ aap_validate_certs }}"
+        force_basic_auth: true
+      register: all_job_templates
+
+    - name: Display project ID mapping
+      ansible.builtin.debug:
+        msg: "Project ID mapping: {{ item.id }} = {{ item.name }}"
+      loop: "{{ all_projects.json.results | default([]) }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Display inventory ID mapping
+      ansible.builtin.debug:
+        msg: "Inventory ID mapping: {{ item.id }} = {{ item.name }}"
+      loop: "{{ all_inventories.json.results | default([]) }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Display available resources
+      ansible.builtin.debug:
+        msg: "Target inventory ID: {{ target_inventory_id }}, Target project ID: {{ target_project_id }}, Target credential ID: {{ target_credential_id }}"
+
+    - name: Sync ocaas-project to ensure playbooks are available
+      ansible.builtin.uri:
+        url: "https://{{ aap_hostname }}/api/controller/v2/projects/{{ target_project_id }}/update/"
+        method: POST
+        user: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        validate_certs: "{{ aap_validate_certs }}"
+        force_basic_auth: true
+        status_code: [200, 201, 202, 204]
+      register: project_sync_result
+      ignore_errors: true
+      failed_when: false
+
+    - name: Wait for project sync to complete
+      ansible.builtin.uri:
+        url: "https://{{ aap_hostname }}/api/controller/v2/projects/{{ target_project_id }}/"
+        method: GET
+        user: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        validate_certs: "{{ aap_validate_certs }}"
+        force_basic_auth: true
+      register: project_status
+      until: project_status.json.status == "successful"
+      retries: 30
+      delay: 2
+      ignore_errors: true
+      when: project_sync_result.status is defined and project_sync_result.status in [200, 201, 202, 204]
+
+    - name: Get project details to see available playbooks
+      ansible.builtin.uri:
+        url: "https://{{ aap_hostname }}/api/controller/v2/projects/{{ target_project_id }}/"
+        method: GET
+        user: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        validate_certs: "{{ aap_validate_certs }}"
+        force_basic_auth: true
+      register: project_details
+
+    - name: Display project playbooks
+      ansible.builtin.debug:
+        msg: "Project '{{ project_details.json.name }}' status: {{ project_details.json.status }}, Last update: {{ project_details.json.last_updated | default('never') }}. Note: Playbook list may need to be checked via project sync."
+
+    - name: Create or update job templates for each cloud provider
+      ansible.builtin.include_tasks: tasks/create-job-template-survey.yml
+      loop: "{{ cloud_providers }}"
+      loop_control:
+        label: "{{ item.template_name }}"

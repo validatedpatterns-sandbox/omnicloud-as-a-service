@@ -1,7 +1,7 @@
 ldap:
   url: "ldap://idm01.aws.validatedpatterns.io"
   insecure: true
-  baseDN: "cn=accounts,dc=aws,dc=validatepatterns,dc=io"
+  baseDN: "cn=accounts,dc=aws,dc=validatedpatterns,dc=io"
   bindDN: "uid=reader"
   usersDN: "cn=users"
   groupsDN: "cn=groups"

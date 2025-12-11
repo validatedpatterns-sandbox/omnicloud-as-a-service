@@ -4,6 +4,7 @@ clusterGroup:
   namespaces:
     - golang-external-secrets
     - devops
+    - imperative
   # The only subscription on spokes is gitops which gets managed by ACM
   subscriptions:
     clair:

@@ -1,0 +1,29 @@
+# Default values for console-banner
+consoleBanner:
+  enabled: true
+  name: cluster-banner
+  # clusterName is automatically derived from global.localClusterName + clusterPlatform
+  # No need to set it manually - it will be constructed from global values
+  text: ""  # Custom text, or will default to "Cluster: {localClusterName}{clusterPlatform}"
+  location: BannerTop  # Options: BannerTop, BannerBottom, BannerTopBottom
+  color: "#FFFFFF"  # Text color (hex) - defaults to white
+  backgroundColor: ""  # Background color (hex) - if empty, will be randomly selected based on clusterName
+
+global:
+  clusterPlatform: ""
+  localClusterName: ""
+  
+  # Available colors (used for random selection if backgroundColor not specified):
+  # - "#0066CC" (Blue)
+  # - "#CC0000" (Red)
+  # - "#FFA500" (Orange)
+  # - "#00CC66" (Green)
+  # - "#9933CC" (Purple)
+  # - "#FF3366" (Pink)
+  # - "#00CCCC" (Cyan)
+  # - "#CC9900" (Amber)
+  # - "#006699" (Teal)
+  # - "#CC0066" (Magenta)
+  link:
+    href: ""
+    text: ""

@@ -1,11 +1,20 @@
 # Deploy cluster using ACM
-- name: "Create namespace {{ cluster.namespace }}"
+
+- name: "Check if the {{ cluster.name }} namespace exists"
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Namespace
+    name: "{{ cluster.name }}"
+  register: namespace_check
+  ignore_errors: true
+
+- name: "Create namespace {{ cluster.name }} if it doesn't exist"
   kubernetes.core.k8s:
-    name: "{{ cluster.namespace }}"
+    name: "{{ cluster.name }}"
     api_version: v1
     kind: Namespace
     state: present
-  when: user_provided_credentials
+  when: namespace_check.resources | length == 0
 
 - name: Generate the clusterDeployment template
   ansible.builtin.template:
@@ -75,19 +84,6 @@
     state: present
     definition: "{{ lookup('template', 'managedCluster.yaml.j2') | from_yaml }}"
 
-- name: Create klusterletAddOnConfig
-  kubernetes.core.k8s:
-    state: present
-    definition: "{{ lookup('template', 'klusterletAddOnConfig.yaml.j2') | from_yaml }}"
-
-- name: "Check if the {{ cluster.name }} namespace exists"
-  kubernetes.core.k8s_info:
-    api_version: v1
-    kind: Namespace
-    name: "{{ cluster.name }}"
-  register: namespace_check
-  ignore_errors: true
-
 - name: Create an import secret using the kubeconfig
   kubernetes.core.k8s:
     state: present
@@ -101,3 +97,8 @@
       data:
         kubeconfig: "{{ lookup('file', '{{ deployment_config_dir }}/kubeconfig') | b64encode }}"
   register: auto_import_secret
+
+- name: Create klusterletAddOnConfig
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'klusterletAddOnConfig.yaml.j2') | from_yaml }}"

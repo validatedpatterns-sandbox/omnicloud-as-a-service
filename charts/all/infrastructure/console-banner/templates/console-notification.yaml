@@ -1,5 +1,5 @@
 {{- if .Values.consoleBanner.enabled }}
-{{- $localClusterName := .Values.global.localClusterName | default "" }}
+{{- $localClusterName := .Values.global.clusterDomain | default "" }}
 {{- $clusterPlatform := .Values.global.clusterPlatform | default "" }}
 {{- $clusterName := printf "%s%s" $localClusterName $clusterPlatform }}
 {{- $nameParts := $localClusterName | splitList "." }}

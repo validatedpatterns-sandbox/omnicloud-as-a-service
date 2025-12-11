@@ -17,3 +17,11 @@ destroy: ## Destroys clusters
 .PHONY: debug
 debug: ## Render templates locally
 	ansible-playbook site.yaml -e "@vars.yml" -e debug_task=true
+
+.PHONY: idm-install
+idm-install: ## Provision ec2 and install IDM - idm-vars to describe server
+	ansible-playbook create-idm-infra.yml
+
+.PHONY: idm-destroy
+idm-destroy: ## Deletes the ec2 and dns records for the provisioned IDM
+	ansible-playbook destroy-idm-infra.yml

@@ -8,6 +8,6 @@ ldap:
   whitelistDN: "cn=ipausers"
 
   oauth:
-    enabled: true
+    enabled: false
   groupsync:
     enabled: true

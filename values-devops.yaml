@@ -27,11 +27,6 @@ clusterGroup:
     - eso
     - devops
   applications:
-    console-banner:
-      name: console-banner
-      namespace: openshift-config
-      argoProject: devops
-      path: charts/all/infrastructure/console-banner
     golang-external-secrets:
       name: golang-external-secrets
       namespace: golang-external-secrets
@@ -43,6 +38,11 @@ clusterGroup:
       namespace: devops
       argoProject: devops
       path: charts/all/infrastructure/rbac
+    console-banner:
+      name: console-banner
+      namespace: openshift-config
+      argoProject: devops
+      path: charts/all/infrastructure/console-banner
     nexus:
       name: nexus
       namespace: devops

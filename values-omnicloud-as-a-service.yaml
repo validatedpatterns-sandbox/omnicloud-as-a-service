@@ -1,13 +1,13 @@
 ldap:
-  url: "ldap://ldap-server.example.com:389"
+  url: "ldap://idm01.aws.validatedpatterns.io"
   insecure: true
-  baseDN: "cn=accounts,dc=example,dc=com"
+  baseDN: "cn=accounts,dc=aws,dc=validatepatterns,dc=io"
   bindDN: "uid=reader"
   usersDN: "cn=users"
   groupsDN: "cn=groups"
   whitelistDN: "cn=ipausers"
 
   oauth:
-    enabled: false
+    enabled: true
   groupsync:
-    enabled: false
+    enabled: true

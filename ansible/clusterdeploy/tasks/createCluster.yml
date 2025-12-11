@@ -28,6 +28,35 @@
     definition: "{{ lookup('template', 'clusterDeployment.yaml.j2') | from_yaml }}"
   register: cd
 
+# MachinePools are only needed for AWS to prevent OpenShift installer from
+# automatically substituting instance types (e.g., m6i.xlarge for m5.4xlarge).
+# Google and Azure respect the install-config instance types directly.
+- name: Generate the controlPlane MachinePool template
+  ansible.builtin.template:
+    src: machinePool-controlPlane.yaml.j2
+    dest: "{{ deployment_config_dir }}/machinepool-controlplane.yaml"
+    mode: "0644"
+  when: cloud.provider != 'Google' and cloud.provider != 'Azure'
+
+- name: Create controlPlane MachinePool resource
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'machinePool-controlPlane.yaml.j2') | from_yaml }}"
+  when: cloud.provider != 'Google' and cloud.provider != 'Azure'
+
+- name: Generate the worker MachinePool template
+  ansible.builtin.template:
+    src: machinePool-worker.yaml.j2
+    dest: "{{ deployment_config_dir }}/machinepool-worker.yaml"
+    mode: "0644"
+  when: cloud.provider != 'Google' and cloud.provider != 'Azure'
+
+- name: Create worker MachinePool resource
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'machinePool-worker.yaml.j2') | from_yaml }}"
+  when: cloud.provider != 'Google' and cloud.provider != 'Azure'
+
 - name: Wait for adminKubeconfigSecretRef to be populated
   kubernetes.core.k8s_info:
     api_version: hive.openshift.io/v1

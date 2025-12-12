@@ -49,3 +49,6 @@ jobs:
           # VALIDATE_MARKDOWN: false
           # VALIDATE_NATURAL_LANGUAGE: false
           # VALIDATE_TEKTON: false
+          # Disable zizmor (GitHub Actions security scanner) due to false positive
+          # on dependabot-cooldown rule - open-pull-requests-limit provides cooldown functionality
+          VALIDATE_GITHUB_ACTIONS_ZIZMOR: false

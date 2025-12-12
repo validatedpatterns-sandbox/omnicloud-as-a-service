@@ -6,4 +6,6 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # Cooldown period to prevent too many PRs in a short time
+    open-pull-requests-limit: 5
 

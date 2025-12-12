@@ -12,6 +12,7 @@ For a quick way to create the banner with automatic color selection:
 ```
 
 This will:
+
 - Create a banner showing "Cluster: gcp0"
 - Automatically select a color based on the cluster name
 - Each cluster gets a different color (deterministic - same cluster = same color)
@@ -28,6 +29,7 @@ consoleBanner:
 ```
 
 This will:
+
 - Create a banner showing: "Cluster: {localClusterName}{clusterPlatform}" (e.g., "Cluster: gcp0gcp")
 - Automatically select a color based on the combined cluster name (deterministic - same cluster always gets same color)
 - Each cluster in the same clusterGroup will get a different color
@@ -71,7 +73,7 @@ consoleBanner:
 ## Values
 
 | Parameter | Description | Default |
-|-----------|-------------|---------|
+| --------- | ----------- | ------- |
 | `consoleBanner.enabled` | Enable the console banner | `true` |
 | `consoleBanner.name` | Name of the ConsoleNotification resource | `cluster-banner` |
 | `global.localClusterName` | Local cluster name (used for banner) | Set in global values |
@@ -92,6 +94,7 @@ consoleBanner:
 ## Examples
 
 ### Automatic Color (Recommended for Multiple Clusters)
+
 Each cluster gets a unique color automatically based on `global.localClusterName` + `clusterPlatform`:
 
 ```yaml
@@ -109,6 +112,7 @@ consoleBanner:
 ```
 
 ### Custom Text with Auto Color
+
 ```yaml
 consoleBanner:
   enabled: true
@@ -117,6 +121,7 @@ consoleBanner:
 ```
 
 ### Manual Color Override
+
 ```yaml
 consoleBanner:
   enabled: true
@@ -127,6 +132,7 @@ consoleBanner:
 ## How Random Color Selection Works
 
 The chart uses a deterministic hash-based approach:
+
 1. Combines `global.localClusterName` + `clusterPlatform` to form the cluster identifier
 2. Creates a hash from the combined name
 3. Uses the hash to select from a palette of 10 colors
@@ -134,6 +140,7 @@ The chart uses a deterministic hash-based approach:
 5. Different clusters get different colors (with high probability)
 
 This ensures:
+
 - **Consistency**: Same cluster always has the same color
 - **Uniqueness**: Different clusters get different colors
 - **No configuration needed**: Uses global values automatically

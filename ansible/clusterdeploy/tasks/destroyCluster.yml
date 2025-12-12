@@ -1,5 +1,5 @@
 ---
-- name: "Remove managedCluser resource {{ cluster.name }}"
+- name: Remove managedCluster resource: {{ cluster.name }}
   kubernetes.core.k8s:
     state: absent
     api_version: cluster.open-cluster-management.io/v1
@@ -7,7 +7,7 @@
     wait: false
   when: destroy
 
-- name: "Destroy {{ cluster.name }}"
+- name: Destroy cluster: {{ cluster.name }}
   kubernetes.core.k8s:
     state: absent
     api_version: hive.openshift.io/v1
@@ -18,7 +18,7 @@
   register: destroy_cluster
   when: destroy
 
-- name: "Wait for ClusterDeployment to be fully deleted: {{ cluster.name }}"
+- name: Wait for ClusterDeployment to be fully deleted: {{ cluster.name }}
   kubernetes.core.k8s_info:
     api_version: hive.openshift.io/v1
     kind: ClusterDeployment
@@ -31,7 +31,7 @@
   delay: 10
   when: destroy
 
-- name: "Remove {{ deployment_config_dir }}"
+- name: Remove directory: {{ deployment_config_dir }}
   ansible.builtin.file:
     state: absent
     path: "{{ deployment_config_dir }}"

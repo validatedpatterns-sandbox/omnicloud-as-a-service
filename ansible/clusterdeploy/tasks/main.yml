@@ -1,6 +1,6 @@
 ---
 # tasks file for clusterdeploy
-- name: "Create directory {{ cluster.name }}"
+- name: Create directory: {{ cluster.name }}
   ansible.builtin.file:
     name: "{{ cluster.name }}"
     state: directory

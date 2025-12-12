@@ -1,6 +1,6 @@
 # Deploy cluster using ACM
 
-- name: "Check if the {{ cluster.name }} namespace exists"
+- name: Check if namespace exists: {{ cluster.name }}
   kubernetes.core.k8s_info:
     api_version: v1
     kind: Namespace
@@ -8,7 +8,7 @@
   register: namespace_check
   ignore_errors: true
 
-- name: "Create namespace {{ cluster.name }} if it doesn't exist"
+- name: Create namespace if it doesn't exist: {{ cluster.name }}
   kubernetes.core.k8s:
     name: "{{ cluster.name }}"
     api_version: v1
@@ -40,7 +40,7 @@
   retries: 90
   delay: 1
 
-- name: "Wait for Running Pod with label hive.openshift.io/cluster-deployment-name/{{ cluster.name }}"
+- name: Wait for Running Pod with label hive.openshift.io/cluster-deployment-name/{{ cluster.name }}
   kubernetes.core.k8s_info:
     api_version: v1
     kind: Pod

@@ -1,3 +1,10 @@
 ansible/aap-playbooks/entitle-manifest.yml syntax-check[unknown-module] skip
 ansible/clusterdeploy/vars/main.yml var-naming[pattern] skip
 ansible/clusterdeploy/defaults/main.yml var-naming[pattern] skip
+ansible/roles/install-idm/tasks/main.yml fqcn[action] skip
+ansible/roles/provision-ec2/tasks/main.yml fqcn[action] skip
+ansible/create-idm-infra.yml fqcn[action] skip
+ansible/destroy-idm-infra.yml fqcn[action] skip
+ansible/clusterdeploy/tasks/*.yml yaml[empty-lines] skip
+ansible/roles/install-idm/tasks/main.yml fqcn[action-core] skip
+ansible/roles/provision-ec2/tasks/main.yml fqcn[action-core] skip

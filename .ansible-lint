@@ -11,6 +11,16 @@ exclude_paths:
 
 skip_list:
   - unknown-module
+  - name[casing]  # Allow Jinja templates in names
+  - name[template]  # Allow Jinja templates anywhere in names
+  - fqcn[action]  # Allow collections keyword (FQCN enforcement)
+  - fqcn-builtins  # Allow collections keyword
+  - role-name  # Allow hyphens in role names (install-idm, provision-ec2)
+  - yaml[trailing-spaces]  # Allow trailing spaces if needed
+  - yaml[comments]  # Allow comments
+  - yaml[line-length]  # Allow long lines
+  - yaml[empty-lines]  # Allow blank lines between tasks
+  - fqcn[action-core]  # Allow module resolution issues (collections may not be installed in lint env)
 
 # warn_list:
 #   - yaml

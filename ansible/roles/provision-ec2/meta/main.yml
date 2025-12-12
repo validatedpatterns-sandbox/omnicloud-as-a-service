@@ -1,8 +1,8 @@
 ---
 galaxy_info:
-  author: your name
+  author: vp-day0hero
   description: Provision EC2 instances with public IPs
-  company: your company
+  company: validatedpatterns
   license: BSD
   min_ansible_version: "2.9"
   platforms:
@@ -16,4 +16,3 @@ galaxy_info:
     - provisioning
 
 dependencies: []
-

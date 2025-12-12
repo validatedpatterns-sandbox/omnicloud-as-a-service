@@ -44,4 +44,3 @@ idm_target_collections:
   - name: freeipa.ansible_freeipa
   - name: ansible.posix
 install_collections_on_target: true  # Set to false to skip collection installation on target
-

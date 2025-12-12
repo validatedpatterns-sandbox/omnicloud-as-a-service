@@ -14,4 +14,3 @@
     # delete_ssh_key: true
   roles:
     - provision-ec2
-

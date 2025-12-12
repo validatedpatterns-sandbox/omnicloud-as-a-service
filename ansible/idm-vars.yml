@@ -1,7 +1,7 @@
 ---
 # Centralized Infrastructure and IDM Configuration Variables
 # Use this file to configure all EC2 provisioning and IDM installation variables
-# 
+#
 # Usage:
 #   - Edit this file to configure your infrastructure
 #   - Run: ansible-playbook create-idm-infra.yml
@@ -136,4 +136,3 @@ install_collections_on_target: true  # Install Ansible collections on target nod
 idm_target_collections:
   - name: freeipa.ansible_freeipa
   - name: ansible.posix
-

@@ -1,8 +1,8 @@
 ---
 galaxy_info:
-  author: your name
+  author: vp-day0hero
   description: Install and configure Red Hat Identity Management (IDM)
-  company: your company
+  company: validatedpatterns
   license: BSD
   min_ansible_version: "2.9"
   platforms:
@@ -17,4 +17,3 @@ galaxy_info:
     - firewalld
 
 dependencies: []
-

@@ -1,5 +1,3 @@
-clusterGroup:
-  isHubCluster: false
 ldap:
   url: "ldap://ldap-server.example.com:389"
   insecure: true

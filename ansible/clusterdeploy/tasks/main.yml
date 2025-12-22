@@ -22,7 +22,7 @@
   ansible.builtin.set_fact:
     clusterdeploy_destroy: >-
       {{
-        (destroy_cluster | default(false) | bool)
+        (clusterdeploy_destroy_cluster | default(destroy_cluster | default(false)) | bool)
         and not (create_cluster | default(false) | bool)
       }}
 

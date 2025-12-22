@@ -38,4 +38,4 @@
   roles:
     - role: clusterdeploy
       vars:
-        destroy_cluster: true
+        clusterdeploy_destroy_cluster: true

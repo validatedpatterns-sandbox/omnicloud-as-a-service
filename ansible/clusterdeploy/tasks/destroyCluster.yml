@@ -57,26 +57,6 @@
   ignore_errors: true
   when: destroy
 
-# Wait for unprovisioning pods to complete
-# Hive creates unprovisioning pods when ClusterDeployment is deleted
-- name: "Wait for unprovisioning pods to complete in namespace {{ cluster_namespace }}"
-  kubernetes.core.k8s_info:
-    api_version: v1
-    kind: Pod
-    namespace: "{{ cluster_namespace }}"
-    label_selectors:
-      - "hive.openshift.io/uninstall=true"
-  register: unprovision_pods_status
-  until:
-    - unprovision_pods_status.resources is not defined
-    - or unprovision_pods_status.resources | length == 0
-  retries: 180
-  delay: 10
-  ignore_errors: true
-  when:
-    - destroy
-    - cluster_namespace != 'hive'
-
 # Remove ManagedCluster (second main resource)
 - name: "Remove ManagedCluster {{ cluster.name }}"
   kubernetes.core.k8s:

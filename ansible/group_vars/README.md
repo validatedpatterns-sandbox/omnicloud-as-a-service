@@ -4,7 +4,7 @@ This directory contains organized variable files using Ansible's `group_vars` pa
 
 ## Directory Structure
 
-```
+```text
 group_vars/
 ├── all/
 │   └── main.yml          # Common variables for all providers

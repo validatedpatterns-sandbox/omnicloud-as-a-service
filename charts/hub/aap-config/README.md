@@ -13,13 +13,13 @@ This chart is used to set up the Ansible Automation Platform Operator version 2.
 ## Requirements
 
 | Repository | Name | Version |
-|------------|------|---------|
+| ---------- | ---- | ------- |
 | https://charts.validatedpatterns.io | vp-rbac | 0.1.* |
 
 ## Values
 
 | Key | Type | Default | Description |
-|-----|------|---------|-------------|
+| --- | ---- | ------- | ----------- |
 | aap.eda_disabled | bool | `false` |  |
 | aap.hub_disabled | bool | `true` |  |
 | aap.lightspeed_disabled | bool | `true` |  |

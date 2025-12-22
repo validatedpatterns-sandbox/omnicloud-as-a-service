@@ -47,5 +47,10 @@ jobs:
           VALIDATE_YAML: false
           VALIDATE_YAML_PRETTIER: false
           # VALIDATE_MARKDOWN: false
-          # VALIDATE_NATURAL_LANGUAGE: false
+          # Disable NATURAL_LANGUAGE (textlint) - Vale handles terminology checking instead
+          # Vale allows "git" as lowercase via .github/linters/.vale/git.txt
+          VALIDATE_NATURAL_LANGUAGE: false
           # VALIDATE_TEKTON: false
+          # Disable zizmor (GitHub Actions security scanner) due to false positive
+          # on dependabot-cooldown rule - open-pull-requests-limit provides cooldown functionality
+          VALIDATE_GITHUB_ACTIONS_ZIZMOR: false

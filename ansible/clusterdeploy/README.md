@@ -64,7 +64,7 @@ Keep provider secrets (`aws-creds`, `gcp-creds`, `azure-creds`, `global-pullsecr
   - `azure-creds` (for Azure)
   - `global-pullsecret` (for all providers)
 
-2. Cluster-Specific Credentials
+1. Cluster-Specific Credentials
 
 Create cluster-specific credentials in the target namespace.
 

@@ -12,6 +12,6 @@
       kind: Secret
       metadata:
         name: "{{ cluster.name }}-install-config"
-        namespace: "{{ cluster.namespace | default('hive') }}"
+        namespace: "{{ cluster.name }}"
       data:
         install-config.yaml: "{{ lookup('file', '{{ deployment_config_dir }}/{{ cluster.name }}-install-config.yaml') | b64encode }}"

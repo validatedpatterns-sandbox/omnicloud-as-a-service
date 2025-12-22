@@ -1,0 +1,41 @@
+---
+# Playbook to destroy all resources created by the clusterdeploy role
+#
+# Required variables:
+#   cluster_name: Name of the cluster to destroy
+#
+# The playbook will automatically discover and destroy:
+#   1. ClusterDeployment (and its namespace)
+#   2. ManagedCluster
+#   3. All secrets with cluster_name prefix
+#   4. cluster_name namespace (last to go)
+#
+# Example usage:
+#   ansible-playbook destroyCluster.yml -e cluster_name=my-cluster
+
+- name: Destroy Cluster Resources
+  hosts: localhost
+  gather_facts: false
+  vars:
+    destroy_cluster_input: true
+    cluster_name_input: "{{ cluster_name }}"
+    # Provide minimal defaults for destroy operation (these are not actually used during destroy)
+    cluster_baseDomain_input: "example.com"
+    cloud_provider_input: "Amazon"
+    cloud_region_input: "us-east-1"
+    mp_controlPlane_replicas_input: "3"
+    mp_controlPlane_machineType_input: "m5.xlarge"
+    mp_workers_replicas_input: "3"
+    mp_workers_machineType_input: "m5.xlarge"
+    cc_azure_resourceGroup_input: ""
+    cc_gcp_projectID_input: ""
+  pre_tasks:
+    - name: "Set cluster.name fact"
+      ansible.builtin.set_fact:
+        cluster:
+          name: "{{ cluster_name }}"
+          namespace: "hive"
+  roles:
+    - role: clusterdeploy
+      vars:
+        destroy: true

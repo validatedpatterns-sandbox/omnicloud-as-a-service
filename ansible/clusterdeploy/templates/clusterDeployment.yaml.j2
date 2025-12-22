@@ -3,7 +3,7 @@ apiVersion: hive.openshift.io/v1
 kind: ClusterDeployment
 metadata:
   name: {{ cluster.name }}
-  namespace: {{ cluster.namespace | default('hive') }}
+  namespace: {{ cluster.name }}
   labels:
 {% if cloud.provider == 'Google' %}
     cloud: GCP

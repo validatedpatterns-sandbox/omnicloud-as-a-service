@@ -5,11 +5,26 @@
     name: "{{ cluster.name }}"
     state: directory
     mode: "0755"
-  when: create or debug_task
+  when:
+    - (create or debug_task)
+    - not destroy | default(false)
 
 - name: "Set deployment_config_dir fact"
   ansible.builtin.set_fact:
     deployment_config_dir: "{{ cluster.name }}"
+
+- name: "Set cluster namespace default if not set"
+  ansible.builtin.set_fact:
+    cluster:
+      namespace: "{{ cluster.namespace | default('hive') }}"
+  when: cluster.namespace is not defined
+
+- name: "Copy provider secrets from hive namespace - if not using user_provided_credentials"
+  ansible.builtin.include_tasks: copy-provider-secrets.yml
+  when:
+    - create
+    - not destroy | default(false)
+    - not user_provided_credentials | default(false)
 
 - name: "Create cluster secrets - if using user_provided_credentials"
   ansible.builtin.include_tasks: clusterSecrets.yml
@@ -17,16 +32,20 @@
 
 - name: "Generate install-config for the clusterdeployment"
   ansible.builtin.include_tasks: create-install-config.yml
-  when: create or debug_task
+  when:
+    - (create or debug_task)
+    - not destroy | default(false)
 
 - name: "Create cluster tasks"
   ansible.builtin.include_tasks: createCluster.yml
-  when: create
+  when:
+    - create
+    - not destroy | default(false)
 
-# - name: "Destroy cluster tasks"
-#  ansible.builtin.include_tasks: destroyCluster.yml
-#  when: destroy
-#
+- name: "Destroy cluster tasks"
+  ansible.builtin.include_tasks: destroyCluster.yml
+  when: destroy
+
 # - name: "Run debug play"
 #  ansible.builtin.include_tasks: debug_task.yml
 #  when: debug_task

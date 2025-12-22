@@ -1,67 +1,72 @@
-  apiVersion: v1
-  baseDomain: {{ cluster.baseDomain }}
-  compute:
-  - name: worker
-    replicas: {{ machinePools.workers.replicas }}
-    platform:
-{% if cloud.provider == 'Azure' %}
-      azure:
-        osDisk:
-          diskSizeGB: {{ machinePools.workers.disk.size }}
-        type: {{ machinePools.workers.machineType }}
-{% elif cloud.provider == 'Google' %}
-      gcp:
-        type: {{ machinePools.workers.machineType }}
-{% else %}
-      aws:
-        rootVolume:
-          size: {{ machinePools.workers.disk.size }}
-          type: {{ machinePools.workers.disk.type | default('gp3') }}
-      type: {{ machinePools.workers.machineType }}
-{% endif %}
-  controlPlane:
-    name: master
-    replicas: {{ machinePools.controlPlane.replicas }}
-    platform:
-{% if cloud.provider == 'Azure' %}
-      azure:
-        osDisk:
-          diskSizeGB: {{ machinePools.controlPlane.disk.size }}
-        type: {{ machinePools.controlPlane.machineType }}
-{% elif cloud.provider == 'Google' %}
-      gcp:
-        type: {{ machinePools.controlPlane.machineType }}
-{% else %}
-      aws:
-        rootVolume:
-          size: {{ machinePools.controlPlane.disk.size }}
-          type: {{ machinePools.controlPlane.disk.type | default('gp3') }}
-      type: {{ machinePools.controlPlane.machineType }}
-{% endif %}
-  metadata:
-    name: {{ cluster.name }}
-  networking:
-    clusterNetwork:
-    - cidr: 10.128.0.0/14
-      hostPrefix: 23
-    networkType: OVNKubernetes
-    serviceNetwork:
-    - 172.30.0.0/16
+apiVersion: v1
+metadata:
+  name: {{ cluster.name }}
+baseDomain: {{ cluster.baseDomain }}
+controlPlane:
+  architecture: amd64
+  hyperthreading: Enabled
+  name: master
+  replicas: {{ machinePools.controlPlane.replicas }}
   platform:
-{% if cloud.provider == 'Google' %}
-    gcp:
-      projectID: {{ cloudConfig.gcp.projectID }}
-      region: {{ cloud.region }}
-{% elif cloud.provider == 'Azure' %}
+{% if cloud.provider == 'Azure' %}
     azure:
-      cloudName: {{ cloudConfig.azure.cloudName | default('AzurePublicCloud')}}
-      baseDomainResourceGroupName: {{ cloudConfig.azure.baseDomainResourceGroupName }}
-      region: {{ cloud.region }}
+      osDisk:
+        diskSizeGB: {{ machinePools.controlPlane.disk.size }}
+      type: {{ machinePools.controlPlane.machineType }}
+{% elif cloud.provider == 'Google' %}
+    gcp:
+      type: {{ machinePools.controlPlane.machineType }}
 {% else %}
     aws:
-      region: {{ cloud.region }}
+      rootVolume:
+        size: {{ machinePools.controlPlane.disk.size }}
+        type: {{ machinePools.controlPlane.disk.type | default('gp3') }}
+      type: {{ machinePools.controlPlane.machineType }}
 {% endif %}
-  publish: External
-  pullSecret: '{"auths": ...}'
-  sshKey: |
-    {{ lookup('env', 'ssh_public_key') }}
+compute:
+- architecture: amd64
+  hyperthreading: Enabled
+  name: worker
+  replicas: {{ machinePools.workers.replicas }}
+  platform:
+{% if cloud.provider == 'Azure' %}
+    azure:
+      osDisk:
+        diskSizeGB: {{ machinePools.workers.disk.size }}
+      type: {{ machinePools.workers.machineType }}
+{% elif cloud.provider == 'Google' %}
+    gcp:
+      type: {{ machinePools.workers.machineType }}
+{% else %}
+    aws:
+      rootVolume:
+        size: {{ machinePools.workers.disk.size }}
+        type: {{ machinePools.workers.disk.type | default('gp3') }}
+      type: {{ machinePools.workers.machineType }}
+{% endif %}
+networking:
+  networkType: OVNKubernetes
+  clusterNetwork:
+  - cidr: 10.128.0.0/14
+    hostPrefix: 23
+  machineNetwork:
+  - cidr: 10.0.0.0/16
+  serviceNetwork:
+  - 172.30.0.0/16
+platform:
+{% if cloud.provider == 'Google' %}
+  gcp:
+    projectID: {{ cloudConfig.gcp.projectID }}
+    region: {{ cloud.region }}
+{% elif cloud.provider == 'Azure' %}
+  azure:
+    cloudName: {{ cloudConfig.azure.cloudName | default('AzurePublicCloud')}}
+    baseDomainResourceGroupName: {{ cloudConfig.azure.baseDomainResourceGroupName }}
+    region: {{ cloud.region }}
+{% else %}
+  aws:
+    region: {{ cloud.region }}
+{% endif %}
+pullSecret: "" # skip, hive will inject based on it's secrets
+sshKey: |-
+  {{ lookup('env', 'ssh_public_key') }}

@@ -39,10 +39,10 @@ Keep provider secrets (`aws-creds`, `gcp-creds`, `azure-creds`, `global-pullsecr
 ```yaml
 - hosts: localhost
   vars:
-    cluster_name_input: my-cluster
-    cluster_baseDomain_input: example.com
-    cloud_provider_input: Amazon
-    cloud_region_input: us-east-1
+    cluster_name: my-cluster
+    cluster_base_domain: example.com
+    cloud_provider: Amazon
+    cloud_region: us-east-1
   vars_files:
     - vars.yml
   roles:
@@ -68,10 +68,10 @@ Create cluster-specific credentials in the target namespace.
 ```yaml
 - hosts: localhost
   vars:
-    cluster_name_input: my-cluster
-    cluster_baseDomain_input: example.com
-    cloud_provider_input: Amazon
-    cloud_region_input: us-east-1
+    cluster_name: my-cluster
+    cluster_base_domain: example.com
+    cloud_provider: Amazon
+    cloud_region: us-east-1
   vars_files:
     - vars.yml
   roles:
@@ -100,10 +100,10 @@ Create a cluster using shared provider secrets:
 - hosts: localhost
   gather_facts: false
   vars:
-    cluster_name_input: my-cluster
-    cluster_baseDomain_input: example.com
-    cloud_provider_input: Amazon
-    cloud_region_input: us-east-1
+    cluster_name: my-cluster
+    cluster_base_domain: example.com
+    cloud_provider: Amazon
+    cloud_region: us-east-1
   vars_files:
     - vars.yml
   roles:
@@ -120,7 +120,7 @@ Destroy a cluster:
 - hosts: localhost
   gather_facts: false
   vars:
-    cluster_name_input: my-cluster
+    cluster_name: my-cluster
   roles:
     - role: clusterdeploy
       vars:

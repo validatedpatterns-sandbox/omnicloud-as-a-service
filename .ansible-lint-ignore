@@ -1,3 +1,13 @@
 ansible/aap-playbooks/entitle-manifest.yml syntax-check[unknown-module] skip
 ansible/clusterdeploy/vars/main.yml var-naming[pattern] skip
 ansible/clusterdeploy/defaults/main.yml var-naming[pattern] skip
+ansible/group_vars/all/main.yml var-naming[pattern] skip
+ansible/group_vars/aws/main.yml var-naming[pattern] skip
+ansible/group_vars/azure/main.yml var-naming[pattern] skip
+ansible/group_vars/gcp/main.yml var-naming[pattern] skip
+ansible/group_vars/baremetal/main.yml var-naming[pattern] skip
+ansible/vars.yml var-naming[pattern] skip
+ansible/roles/install-idm role-name skip
+ansible/roles/provision-ec2 role-name skip
+ansible/roles/install-idm/tasks/main.yml syntax-check[unknown-module] skip
+ansible/roles/provision-ec2/tasks/main.yml syntax-check[unknown-module] skip

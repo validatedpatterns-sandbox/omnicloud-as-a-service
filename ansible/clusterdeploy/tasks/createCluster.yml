@@ -1,6 +1,6 @@
 # Deploy cluster using ACM
 
-- name: "Check if the {{ cluster.name }} namespace exists"
+- name: Check if the namespace exists
   kubernetes.core.k8s_info:
     api_version: v1
     kind: Namespace
@@ -8,7 +8,7 @@
   register: namespace_check
   ignore_errors: true
 
-- name: "Create namespace {{ cluster.name }} if it doesn't exist"
+- name: Create namespace if it doesn't exist
   kubernetes.core.k8s:
     name: "{{ cluster.name }}"
     api_version: v1

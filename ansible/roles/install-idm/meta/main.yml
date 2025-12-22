@@ -1,6 +1,6 @@
 ---
 galaxy_info:
-  author: your name
+  author: Validated Patterns Team
   description: Install and configure Red Hat Identity Management (IDM)
   company: your company
   license: BSD
@@ -17,4 +17,3 @@ galaxy_info:
     - firewalld
 
 dependencies: []
-

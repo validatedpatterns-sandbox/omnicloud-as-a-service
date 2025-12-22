@@ -23,7 +23,6 @@ The cluster name is automatically derived from `global.localClusterName` + `clus
 
 ### Basic Usage (Automatic Color Selection)
 
-
 ```yaml
 consoleBanner:
   enabled: true

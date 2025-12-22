@@ -1,80 +1,38 @@
 ---
 # Query ClusterDeployment to find its namespace
-- name: "Find ClusterDeployment {{ cluster.name }}"
+# Try cluster name namespace first (most common), then hive namespace
+- name: "Find ClusterDeployment {{ cluster.name }} in namespace {{ cluster.name }}"
   kubernetes.core.k8s_info:
     api_version: hive.openshift.io/v1
     kind: ClusterDeployment
     name: "{{ cluster.name }}"
-  register: cluster_deployment_info
-  ignore_errors: true
-  when: destroy
-
-- name: "Set cluster namespace from ClusterDeployment"
-  ansible.builtin.set_fact:
-    cluster_namespace: "{{ cluster_deployment_info.resources[0].metadata.namespace }}"
-  when:
-    - destroy
-    - cluster_deployment_info.resources is defined
-    - cluster_deployment_info.resources | length > 0
-
-- name: "Set cluster namespace to default if not found"
-  ansible.builtin.set_fact:
-    cluster_namespace: "hive"
-  when:
-    - destroy
-    - cluster_deployment_info.resources is not defined or cluster_deployment_info.resources | length == 0
-
-# Remove KlusterletAddOnConfig
-- name: "Remove KlusterletAddOnConfig {{ cluster.name }}"
-  kubernetes.core.k8s:
-    state: absent
-    api_version: agent.open-cluster-management.io/v1
-    kind: KlusterletAddOnConfig
-    name: "{{ cluster.name }}"
     namespace: "{{ cluster.name }}"
-    wait: false
+  register: cluster_deployment_info_cluster_ns
   ignore_errors: true
   when: destroy
 
-# Remove auto-import-secret
-- name: "Remove auto-import-secret from namespace {{ cluster.name }}"
-  kubernetes.core.k8s:
-    state: absent
-    api_version: v1
-    kind: Secret
-    name: "auto-import-secret"
-    namespace: "{{ cluster.name }}"
-    wait: false
-  ignore_errors: true
-  when: destroy
-
-# Remove MachinePool if it exists
-- name: "Find MachinePool {{ cluster.name }}-worker"
+- name: "Find ClusterDeployment {{ cluster.name }} in hive namespace"
   kubernetes.core.k8s_info:
     api_version: hive.openshift.io/v1
-    kind: MachinePool
-    name: "{{ cluster.name }}-worker"
-    namespace: "{{ cluster_namespace }}"
-  register: machinepool_info
+    kind: ClusterDeployment
+    name: "{{ cluster.name }}"
+    namespace: "hive"
+  register: cluster_deployment_info_hive_ns
   ignore_errors: true
   when: destroy
 
-- name: "Remove MachinePool {{ cluster.name }}-worker"
-  kubernetes.core.k8s:
-    state: absent
-    api_version: hive.openshift.io/v1
-    kind: MachinePool
-    name: "{{ cluster.name }}-worker"
-    namespace: "{{ cluster_namespace }}"
-    wait: false
-  ignore_errors: true
-  when:
-    - destroy
-    - machinepool_info.resources is defined
-    - machinepool_info.resources | length > 0
+- name: "Set cluster namespace from found ClusterDeployment"
+  ansible.builtin.set_fact:
+    cluster_namespace: "{{ cluster_deployment_info_cluster_ns.resources[0].metadata.namespace if (cluster_deployment_info_cluster_ns.resources is defined and cluster_deployment_info_cluster_ns.resources | length > 0) else (cluster_deployment_info_hive_ns.resources[0].metadata.namespace if (cluster_deployment_info_hive_ns.resources is defined and cluster_deployment_info_hive_ns.resources | length > 0) else cluster.name) }}"
+  when: destroy
+
+- name: "Set cluster deployment info register"
+  ansible.builtin.set_fact:
+    cluster_deployment_info: "{{ cluster_deployment_info_cluster_ns if (cluster_deployment_info_cluster_ns.resources is defined and cluster_deployment_info_cluster_ns.resources | length > 0) else cluster_deployment_info_hive_ns }}"
+  when: destroy
 
 # Remove ClusterDeployment (first main resource)
-- name: "Destroy ClusterDeployment {{ cluster.name }}"
+- name: "Destroy ClusterDeployment {{ cluster.name }} in namespace {{ cluster_namespace }}"
   kubernetes.core.k8s:
     state: absent
     api_version: hive.openshift.io/v1
@@ -83,7 +41,6 @@
     namespace: "{{ cluster_namespace }}"
     wait: false
   register: destroy_cluster
-  ignore_errors: true
   when: destroy
 
 - name: "Wait for ClusterDeployment to be fully deleted: {{ cluster.name }}"
@@ -100,6 +57,26 @@
   ignore_errors: true
   when: destroy
 
+# Wait for unprovisioning pods to complete
+# Hive creates unprovisioning pods when ClusterDeployment is deleted
+- name: "Wait for unprovisioning pods to complete in namespace {{ cluster_namespace }}"
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ cluster_namespace }}"
+    label_selectors:
+      - "hive.openshift.io/uninstall=true"
+  register: unprovision_pods_status
+  until:
+    - unprovision_pods_status.resources is not defined
+    - or unprovision_pods_status.resources | length == 0
+  retries: 180
+  delay: 10
+  ignore_errors: true
+  when:
+    - destroy
+    - cluster_namespace != 'hive'
+
 # Remove ManagedCluster (second main resource)
 - name: "Remove ManagedCluster {{ cluster.name }}"
   kubernetes.core.k8s:
@@ -111,71 +88,63 @@
   ignore_errors: true
   when: destroy
 
-# Find and remove all secrets with cluster.name prefix
-- name: "Find all secrets in namespace {{ cluster_namespace }}"
+# Wait for ManagedCluster to be fully deleted
+- name: "Wait for ManagedCluster {{ cluster.name }} to be fully deleted"
   kubernetes.core.k8s_info:
-    api_version: v1
-    kind: Secret
-    namespace: "{{ cluster_namespace }}"
-  register: all_secrets
+    api_version: cluster.open-cluster-management.io/v1
+    kind: ManagedCluster
+    name: "{{ cluster.name }}"
+  register: managedcluster_deletion_status
+  until:
+    - managedcluster_deletion_status.resources is not defined or managedcluster_deletion_status.resources | length == 0
+  retries: 120
+  delay: 10
   ignore_errors: true
   when: destroy
 
-- name: "Remove secrets with {{ cluster.name }} prefix from {{ cluster_namespace }}"
-  kubernetes.core.k8s:
-    state: absent
-    api_version: v1
-    kind: Secret
-    name: "{{ item.metadata.name }}"
-    namespace: "{{ cluster_namespace }}"
-    wait: false
-  ignore_errors: true
-  loop: "{{ all_secrets.resources | default([]) }}"
-  when:
-    - destroy
-    - all_secrets.resources is defined
-    - item.metadata.name is match('^' + cluster.name + '.*')
-    # Don't delete provider secrets (aws-creds, gcp-creds, azure-creds, global-pullsecret) from hive namespace
-    - not (cluster_namespace == 'hive' and (item.metadata.name == 'aws-creds' or item.metadata.name == 'gcp-creds' or item.metadata.name == 'azure-creds' or item.metadata.name == 'global-pullsecret'))
-
-- name: "Find all secrets in namespace {{ cluster.name }}"
+# Verify ClusterDeployment and ManagedCluster are gone, then confirm namespace is removed
+- name: "Final check - Verify ClusterDeployment {{ cluster.name }} is deleted"
   kubernetes.core.k8s_info:
-    api_version: v1
-    kind: Secret
-    namespace: "{{ cluster.name }}"
-  register: cluster_namespace_secrets
+    api_version: hive.openshift.io/v1
+    kind: ClusterDeployment
+    name: "{{ cluster.name }}"
+    namespace: "{{ cluster_namespace }}"
+  register: final_clusterdeployment_check
   ignore_errors: true
-  when: destroy
-
-- name: "Remove secrets with {{ cluster.name }} prefix from {{ cluster.name }} namespace"
-  kubernetes.core.k8s:
-    state: absent
-    api_version: v1
-    kind: Secret
-    name: "{{ item.metadata.name }}"
-    namespace: "{{ cluster.name }}"
-    wait: false
-  ignore_errors: true
-  loop: "{{ cluster_namespace_secrets.resources | default([]) }}"
   when:
     - destroy
-    - cluster_namespace_secrets.resources is defined
-    - item.metadata.name is match('^' + cluster.name + '.*')
-    # Never delete secrets from hive namespace (safety check)
+    - cluster.name != 'hive'
+    - cluster_namespace != 'hive'
+
+- name: "Final check - Verify ManagedCluster {{ cluster.name }} is deleted"
+  kubernetes.core.k8s_info:
+    api_version: cluster.open-cluster-management.io/v1
+    kind: ManagedCluster
+    name: "{{ cluster.name }}"
+  register: final_managedcluster_check
+  ignore_errors: true
+  when:
+    - destroy
     - cluster.name != 'hive'
 
-# Remove cluster namespace (last to go) - but never delete the hive namespace
-- name: "Remove namespace {{ cluster.name }}"
-  kubernetes.core.k8s:
-    state: absent
+# Confirm namespace is removed after both ClusterDeployment and ManagedCluster are gone
+- name: "Confirm namespace {{ cluster_namespace }} has been removed"
+  kubernetes.core.k8s_info:
     api_version: v1
     kind: Namespace
-    name: "{{ cluster.name }}"
-    wait: false
+    name: "{{ cluster_namespace }}"
+  register: namespace_status
+  until:
+    - namespace_status.resources is not defined or namespace_status.resources | length == 0
+  retries: 60
+  delay: 10
   ignore_errors: true
   when:
     - destroy
     - cluster.name != 'hive'
+    - cluster_namespace != 'hive'
+    - final_clusterdeployment_check.resources is not defined or final_clusterdeployment_check.resources | length == 0
+    - final_managedcluster_check.resources is not defined or final_managedcluster_check.resources | length == 0
 
 # Remove deployment config directory if it exists locally
 - name: "Remove {{ cluster.name }} directory"

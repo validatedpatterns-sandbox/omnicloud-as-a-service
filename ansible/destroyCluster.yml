@@ -17,18 +17,18 @@
   hosts: localhost
   gather_facts: false
   vars:
-    destroy_cluster_input: true
-    cluster_name_input: "{{ cluster_name }}"
+    destroy_cluster: true
+    cluster_name: "{{ cluster_name }}"
     # Provide minimal defaults for destroy operation (these are not actually used during destroy)
-    cluster_baseDomain_input: "example.com"
-    cloud_provider_input: "Amazon"
-    cloud_region_input: "us-east-1"
-    mp_controlPlane_replicas_input: "3"
-    mp_controlPlane_machineType_input: "m5.xlarge"
-    mp_workers_replicas_input: "3"
-    mp_workers_machineType_input: "m5.xlarge"
-    cc_azure_resourceGroup_input: ""
-    cc_gcp_projectID_input: ""
+    cluster_base_domain: "example.com"
+    cloud_provider: "Amazon"
+    cloud_region: "us-east-1"
+    control_plane_replicas: "3"
+    control_plane_machine_type: "m5.xlarge"
+    worker_replicas: "3"
+    worker_machine_type: "m5.xlarge"
+    azure_resource_group: ""
+    gcp_project_id: ""
   pre_tasks:
     - name: "Set cluster.name fact"
       ansible.builtin.set_fact:

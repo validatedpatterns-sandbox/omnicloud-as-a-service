@@ -1,5 +1,10 @@
 - name: Cluster Management
   hosts: localhost
+  connection: local
   gather_facts: false
+  # group_vars will be automatically loaded based on inventory groups
+  # Use: ansible-playbook site.yaml -i inventory.yml --limit aws
+  # Or: ansible-playbook site.yaml -i inventory.yml --limit azure
+  # Variables can still be passed via -e flags or vars.yml
   roles:
     - clusterdeploy

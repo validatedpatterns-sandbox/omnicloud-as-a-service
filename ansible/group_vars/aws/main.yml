@@ -1,0 +1,27 @@
+---
+# AWS-specific configuration variables
+
+# Cloud provider identifier
+cloud:
+  provider: "{{ cloud_provider | default('Amazon') }}"
+
+# AWS-specific cluster configuration
+cluster:
+  baseDomain: "{{ cluster_base_domain }}"
+
+# AWS-specific cloud configuration
+cloudConfig:
+  aws: {}
+  # AWS doesn't require additional config in cloudConfig
+  # Region is specified in cloud.region
+
+# AWS-specific machine pool defaults
+machinePools:
+  controlPlane:
+    machineType: "{{ control_plane_machine_type }}"
+    disk:
+      type: gp3  # AWS EBS volume type
+  workers:
+    machineType: "{{ worker_machine_type }}"
+    disk:
+      type: gp3  # AWS EBS volume type

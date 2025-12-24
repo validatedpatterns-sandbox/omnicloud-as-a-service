@@ -2,9 +2,6 @@
 - name: Destroy EC2 Instances and Resources
   hosts: localhost
   gather_facts: false
-  collections:
-    - amazon.aws
-    - community.aws
   vars_files:
     - idm-vars.yml
   vars:
@@ -14,4 +11,3 @@
     # delete_ssh_key: true
   roles:
     - provision-ec2
-

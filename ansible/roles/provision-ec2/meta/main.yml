@@ -1,6 +1,6 @@
 ---
 galaxy_info:
-  author: your name
+  author: Validated Patterns Team
   description: Provision EC2 instances with public IPs
   company: your company
   license: BSD
@@ -16,4 +16,3 @@ galaxy_info:
     - provisioning
 
 dependencies: []
-

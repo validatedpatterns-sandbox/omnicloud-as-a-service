@@ -1,28 +1,25 @@
 ---
 # Centralized Infrastructure and IDM Configuration Variables
 # Use this file to configure all EC2 provisioning and IDM installation variables
-# 
+#
 # Usage:
 #   - Edit this file to configure your infrastructure
 #   - Run: ansible-playbook create-idm-infra.yml
 #   - Destroy: ansible-playbook destroy-idm-infra.yml
 #   - Or use Makefile targets: make idm-create, make idm-destroy
-
 # ============================================================================
 # AWS Configuration
 # ============================================================================
-aws_region: "us-west-1"
+aws_region: "us-west-2"
 key_name: "idm"
 ssh_public_key_path: "~/.ssh/id_rsa.pub"
-vpc_security_group_name: "bastion-sg"
+vpc_security_group_name: "idm-sg"
 allow_cidrs: "0.0.0.0/0"
-
 # ============================================================================
 # Route53 DNS Configuration
 # ============================================================================
-hosted_zone: "example.com."  # Route53 hosted zone (with trailing dot)
+hosted_zone: "cluster.example.com."  # Route53 hosted zone (with trailing dot)
 create_dns_records: true  # Set to false to skip DNS record creation
-
 # ============================================================================
 # EC2 Instance Configuration
 # ============================================================================
@@ -30,11 +27,9 @@ create_dns_records: true  # Set to false to skip DNS record creation
 instance_type: "t3.medium"
 instance_ebs_size: 20
 wait_for_ssh_timeout: 600
-
 # EC2 Tags
-ec2_tags: "omnicloud"
-ec2_role: "bastion"
-
+ec2_tags: "ocaas-idm"
+ec2_role: "idm"
 # ============================================================================
 # IDM Instances Configuration
 # ============================================================================
@@ -43,10 +38,9 @@ ec2_instances_idm:
     instance_name: "idm-server-01"
     instance_type: "t3.large"
     ec2_role: "idm"
-    fqdn: "idm01.example.com."  # With trailing dot for Route53
-    fqdn_nodot: "idm01.example.com"  # Without trailing dot for inventory
+    fqdn: "idm01.cluster.example.com."  # With trailing dot for Route53
+    fqdn_nodot: "idm01.cluster.example.com"  # Without trailing dot for inventory
     groups: ["idm_servers", "ipaservers"]
-
 # ============================================================================
 # AAP Instances Configuration
 # ============================================================================
@@ -60,7 +54,6 @@ ec2_instances_aap: []
   #     fqdn: "aap01.example.com."
   #     fqdn_nodot: "aap01.example.com"
   #     groups: ["aap_servers"]
-
 # ============================================================================
 # Satellite Instances Configuration
 # ============================================================================
@@ -74,13 +67,11 @@ ec2_instances_satellite: []
   #     fqdn: "sat01.example.com."
   #     fqdn_nodot: "sat01.example.com"
   #     groups: ["satellite_servers"]
-
 # ============================================================================
 # IDM/FreeIPA Configuration
 # ============================================================================
-ipa_zone: "example.com"
-ipa_pw: "ENTER_PW_FOR_IPA"
-
+ipa_zone: "cluster.example.com"
+ipa_pw: "ENTER_SOME_PW"
 # IDM Server Configuration
 # Note: ipaserver_hostname is automatically set from fqdn_nodot
 ipaserver_no_host_dns: true
@@ -92,14 +83,12 @@ ipaserver_domain: "{{ ipa_zone }}"
 ipaserver_realm: "{{ ipa_zone | upper }}"
 ipaadmin_password: "{{ ipa_pw }}"
 ipadm_password: "{{ ipa_pw }}"
-
 # IDM Packages
 idm_packages:
   - vim
   - git
   - ipa-server
   - firewalld
-
 # IDM Firewalld Rules
 idm_firewalld_rules:
   - port: "22/tcp"
@@ -110,17 +99,18 @@ idm_firewalld_rules:
   - port: "636/tcp"
   - port: "88/tcp"
   - port: "88/udp"
-
 # IDM Users
 idm:
   users:
-    - name: user1
-      first: user
+    - name: reader
+      first: directory
+      last: reader
+    - name: fname
+      first: first
       last: name
-    - name: user2
-      first: user
+    - name: fname
+      first: first
       last: name
-
 # ============================================================================
 # Destroy/Delete Configuration
 # ============================================================================
@@ -128,7 +118,6 @@ idm:
 # destroy: false  # Set to true to destroy all resources
 # delete_security_group: false  # Set to true to delete security group on destroy
 # delete_ssh_key: false  # Set to true to delete SSH key on destroy
-
 # ============================================================================
 # Target Node Configuration
 # ============================================================================
@@ -136,4 +125,3 @@ install_collections_on_target: true  # Install Ansible collections on target nod
 idm_target_collections:
   - name: freeipa.ansible_freeipa
   - name: ansible.posix
-

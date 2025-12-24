@@ -3,7 +3,18 @@ apiVersion: hive.openshift.io/v1
 kind: ClusterDeployment
 metadata:
   name: {{ cluster.name }}
-  namespace: {{ cluster.namespace | default('hive') }}
+  namespace: {{ cluster.name }}
+  labels:
+{% if cloud.provider == 'Google' %}
+    cloud: GCP
+{% elif cloud.provider == 'Azure' %}
+    cloud: Azure
+{% else %}
+    cloud: AWS
+{% endif %}
+    region: {{ cloud.region }}
+    vendor: OpenShift
+    cluster.open-cluster-management.io/clusterset: 'default'
 spec:
   baseDomain: {{ cluster.baseDomain }}
   clusterName: {{ cluster.name }}

@@ -1,7 +1,10 @@
 ---
 # defaults file for clusterdeploy
-create: "{{ create_cluster_input | default('false') }}"
-destroy: "{{ destroy_cluster_input | default('false') }}"
+create: "{{ create_cluster | default('false') }}"
+clusterdeploy_destroy: >-
+  {{
+    clusterdeploy_destroy_cluster | default(destroy_cluster | default('false'))
+  }}
 # Render templates for debugging
 debug_task: false
 

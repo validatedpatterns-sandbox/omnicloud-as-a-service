@@ -1,34 +1,33 @@
 # Define the cluster's high-level state regardless of the cloud.
 cluster:
-  name: "{{ cluster_name_input }}"
-  clusterGroup: "{{ cluster_clusterGroup_input }}" devops # clusterGroup for application deployment to provisioned clusters
-  version: img4.19.9-x86-64-appsub # oc get clusterimageset
-  baseDomain: "{{ cluster_baseDomain_input }}"
+  name: "{{ cluster_name }}"
+  clusterGroup: "{{ cluster_group }}"  # clusterGroup for application deployment to provisioned clusters
+  version: img4.19.9-x86-64-appsub  # oc get clusterimageset
+  baseDomain: "{{ cluster_base_domain }}"
 
 # This section defines *which* cloud is used and contains common/primary cloud config.
 cloud:
-  provider: "{{ cloud_provider_input }}"
-  region: "{{ cloud_region_input }}"
-
+  provider: "{{ cloud_provider }}"
+  region: "{{ cloud_region }}"
 
 # Grouping hardware/scaling specs together.
 machinePools:
   controlPlane:
-    replicas: "{{ mp_controlPlane_replicas_input }}"
-    machineType: "{{ mp_controlPlane_machineType_input }}"
+    replicas: "{{ control_plane_replicas }}"
+    machineType: "{{ control_plane_machine_type }}"
     disk:
-      size: 200 # GB
+      size: 200  # GB
   workers:
-    replicas: "{{ mp_workers_replicas_input }}"
-    machineType: "{{ mp_workers_machineType_input }}"
+    replicas: "{{ worker_replicas }}"
+    machineType: "{{ worker_machine_type }}"
     disk:
-      size: 200 # GB
+      size: 200  # GB
 
 # Cloud-Specific Configurations
 cloudConfig:
   azure:
     cloudName: AzurePublicCloud
-    baseDomainResourceGroupName: "{{ cc_azure_resourceGroup_input }}"
+    baseDomainResourceGroupName: "{{ azure_resource_group }}"
   gcp:
-    projectID: "{{ cc_gcp_projectID_input }}"
+    projectID: "{{ gcp_project_id }}"
   aws: {}

@@ -1,0 +1,19 @@
+---
+# Inventory file for cluster deployment
+# Use this to select which cloud provider group to use
+# Usage: ansible-playbook site.yaml -i inventory.yml -e "cloud_provider=Amazon" --limit aws
+
+all:
+  children:
+    aws:
+      hosts:
+        localhost:
+    azure:
+      hosts:
+        localhost:
+    gcp:
+      hosts:
+        localhost:
+    baremetal:
+      hosts:
+        localhost:

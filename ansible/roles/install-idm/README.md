@@ -27,6 +27,7 @@ None - all variables have defaults, but you'll typically want to override:
 See `defaults/main.yml` for all available variables.
 
 Key variables:
+
 - `idm_packages` - List of packages to install (default: vim, git, ipa-server, firewalld)
 - `idm_firewalld_rules` - List of firewalld port rules to add
 - `idm_users` - List of users to create in IDM
@@ -38,7 +39,8 @@ Key variables:
 
 ### Installation Options
 
-**Option 1: Install from Galaxy (Recommended for Fedora)**
+#### Option 1: Install from Galaxy (Recommended for Fedora)
+
 ```bash
 # Install from requirements file
 ansible-galaxy collection install -r requirements.yml
@@ -47,13 +49,15 @@ ansible-galaxy collection install -r requirements.yml
 ansible-galaxy collection install freeipa.ansible_freeipa ansible.posix
 ```
 
-**Option 2: Install via Fedora package (Alternative)**
+#### Option 2: Install via Fedora package (Alternative)
+
 ```bash
 # On Fedora control node
 sudo dnf install ansible-freeipa
 ```
 
-**Option 3: Use Red Hat Automation Hub (If you have Red Hat subscription)**
+#### Option 3: Use Red Hat Automation Hub (If you have Red Hat subscription)
+
 ```bash
 # Configure ansible.cfg to use Automation Hub, then:
 ansible-galaxy collection install redhat.ipa ansible.posix
@@ -146,6 +150,7 @@ The role uses the following IPA server variables (all configurable):
 ## Firewalld Rules
 
 The role automatically adds the following firewalld rules:
+
 - 22/tcp (SSH)
 - 80/tcp (HTTP)
 - 443/tcp (HTTPS)
@@ -164,4 +169,3 @@ BSD
 ## Author Information
 
 Created for omnicloud-as-a-service project
-

@@ -38,4 +38,3 @@ create_dns_records: true  # Set to false to skip DNS record creation
 destroy: false  # Set to true to delete all provisioned resources
 delete_security_group: false  # Set to true to delete security group on destroy
 delete_ssh_key: false  # Set to true to delete SSH key on destroy
-

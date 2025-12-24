@@ -1,0 +1,27 @@
+---
+# GCP-specific configuration variables
+
+# Cloud provider identifier
+cloud:
+  provider: "{{ cloud_provider | default('Google') }}"
+
+# GCP-specific cluster configuration
+cluster:
+  baseDomain: "{{ cluster_base_domain }}"
+
+# GCP-specific cloud configuration
+cloudConfig:
+  gcp:
+    projectID: "{{ gcp_project_id }}"
+
+# GCP-specific machine pool defaults
+# Note: GCP doesn't use disk size in machine pool config (handled differently)
+machinePools:
+  controlPlane:
+    machineType: "{{ control_plane_machine_type }}"
+    disk:
+      size: 200  # GB (reference only, not used in GCP machine pool)
+  workers:
+    machineType: "{{ worker_machine_type }}"
+    disk:
+      size: 200  # GB (reference only, not used in GCP machine pool)

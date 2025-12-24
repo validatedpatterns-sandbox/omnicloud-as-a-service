@@ -5,7 +5,7 @@ collections:
   - name: ansible.posix
   - name: amazon.aws
   - name: community.aws
-  
+
   # Option 2: If you have Red Hat subscription, use redhat.ipa from Automation Hub
   # You'll need to configure ansible.cfg with:
   # [galaxy]
@@ -13,4 +13,3 @@ collections:
   # And authenticate with: ansible-galaxy login --github-token or --token
   # - name: redhat.ipa
   #   source: https://cloud.redhat.com/api/automation-hub/
-

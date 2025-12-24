@@ -26,6 +26,7 @@ None - all variables have defaults, but you'll typically want to override:
 See `defaults/main.yml` for all available variables.
 
 Key optional variables:
+
 - `hosted_zone` - Route53 hosted zone name (e.g., "example.com.") for DNS record creation
 - `create_dns_records` - Set to `false` to skip DNS record creation (default: `true`)
 
@@ -131,6 +132,7 @@ The role can automatically create/update Route53 A records for provisioned insta
 The DNS records will be created/updated with the instance's public IP address. The task is idempotent and will update existing records if the IP changes.
 
 Example:
+
 ```yaml
 hosted_zone: "example.com."
 ec2_instances_idm:
@@ -174,6 +176,7 @@ The role supports destroying all provisioned resources. To delete all instances 
 ```
 
 The destroy operation will:
+
 - Find all instances matching the provided instance names
 - Delete Route53 DNS records (if `fqdn` or `fqdn_nodot` is provided)
 - Terminate EC2 instances
@@ -185,6 +188,7 @@ The destroy operation will:
 ## Idempotency
 
 This role is idempotent. It will:
+
 - Check for existing instances by name before creating
 - Skip instance creation if an instance with the same name already exists
 - Still add existing instances to the inventory
@@ -199,4 +203,3 @@ BSD
 ## Author Information
 
 Created for omnicloud-as-a-service project
-

@@ -1,0 +1,27 @@
+---
+# Baremetal-specific configuration variables
+
+# Cloud provider identifier
+cloud:
+  provider: "{{ cloud_provider | default('BareMetal') }}"
+
+# Baremetal-specific cluster configuration
+cluster:
+  baseDomain: "{{ cluster_base_domain }}"
+
+# Baremetal-specific cloud configuration
+cloudConfig:
+  baremetal: {}
+  # Baremetal configurations would go here
+  # Examples: BMC credentials, provisioning network, etc.
+
+# Baremetal-specific machine pool defaults
+machinePools:
+  controlPlane:
+    machineType: "{{ control_plane_machine_type }}"
+    disk:
+      size: 200  # GB
+  workers:
+    machineType: "{{ worker_machine_type }}"
+    disk:
+      size: 200  # GB

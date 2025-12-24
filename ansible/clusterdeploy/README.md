@@ -1,31 +1,137 @@
 Role Name
 =========
 
-A brief description of the role goes here.
+clusterdeploy - Ansible role for deploying OpenShift clusters using ACM (Advanced Cluster Management) and Hive.
 
 Requirements
 ------------
 
-Any pre-requisites that may not be covered by Ansible itself or the role should be mentioned here. For instance, if the role uses the EC2 module, it may be a good idea to mention in this section that the boto package is required.
+- Kubernetes cluster with ACM and Hive installed
+- Provider credentials secrets (aws-creds, gcp-creds, or azure-creds) in the `hive` namespace
+- global-pullsecret in the `hive` namespace
+- Ansible collections: kubernetes.core
 
 Role Variables
 --------------
 
-A description of the settable variables for this role should go here, including any variables that are in defaults/main.yml, vars/main.yml, and any variables that can/should be set via parameters to the role. Any variables that are read from other roles and/or the global scope (ie. hostvars, group vars, etc.) should be mentioned here as well.
+Key variables:
+
+- `cluster.name`: Name of the cluster to deploy
+- `cluster.namespace`: Namespace where ClusterDeployment will be created (defaults to 'hive')
+- `cloud.provider`: Cloud provider ('Amazon', 'Google', or 'Azure')
+- `cloud.region`: Cloud region
+- `user_provided_credentials`: Set to true to create cluster-specific credentials (default: false)
+
+Provider Secrets Workflow
+--------------------------
+
+The role supports two workflows for managing provider credentials:
+
+1. Shared Provider Secrets (Recommended - ACM Console Style)
+
+Keep provider secrets (`aws-creds`, `gcp-creds`, `azure-creds`, `global-pullsecret`) in the `hive` namespace and reuse them across multiple clusters in different namespaces.
+
+**How it works:**
+
+- Provider secrets are stored once in the `hive` namespace
+- When creating a cluster in a different namespace (e.g., `democluster`), the role automatically copies the secrets from `hive` to the target namespace
+- This allows multiple clusters to share the same provider credentials
+
+**Example:**
+
+```yaml
+- hosts: localhost
+  vars:
+    cluster_name: my-cluster
+    cluster_base_domain: example.com
+    cloud_provider: Amazon
+    cloud_region: us-east-1
+  vars_files:
+    - vars.yml
+  roles:
+    - role: clusterdeploy
+      vars:
+        cluster:
+          namespace: democluster  # Different namespace
+        user_provided_credentials: false  # Use shared secrets
+```
+
+**Prerequisites:**
+
+- Secrets must exist in the `hive` namespace:
+  - `aws-creds` (for AWS)
+  - `gcp-creds` (for GCP)
+  - `azure-creds` (for Azure)
+  - `global-pullsecret` (for all providers)
+
+1. Cluster-Specific Credentials
+
+Create cluster-specific credentials in the target namespace.
+
+**Example:**
+
+```yaml
+- hosts: localhost
+  vars:
+    cluster_name: my-cluster
+    cluster_base_domain: example.com
+    cloud_provider: Amazon
+    cloud_region: us-east-1
+  vars_files:
+    - vars.yml
+  roles:
+    - role: clusterdeploy
+      vars:
+        user_provided_credentials: true  # Create cluster-specific secrets
+```
+
+**Note:** When `user_provided_credentials: true`, credential files must exist:
+
+- `~/.pullsecret.json`
+- `~/.gcp/osServiceAccount.json` (for GCP)
+- `~/.azure/osServicePrincipal.json` (for Azure)
+- AWS credentials template (for AWS)
 
 Dependencies
 ------------
 
-A list of other roles hosted on Galaxy should go here, plus any details in regards to parameters that may need to be set for other roles, or variables that are used from other roles.
+None
 
 Example Playbook
 ----------------
 
-Including an example of how to use your role (for instance, with variables passed in as parameters) is always nice for users too:
+Create a cluster using shared provider secrets:
 
-    - hosts: servers
-      roles:
-         - { role: username.rolename, x: 42 }
+```yaml
+- hosts: localhost
+  gather_facts: false
+  vars:
+    cluster_name: my-cluster
+    cluster_base_domain: example.com
+    cloud_provider: Amazon
+    cloud_region: us-east-1
+  vars_files:
+    - vars.yml
+  roles:
+    - role: clusterdeploy
+      vars:
+        cluster:
+          namespace: democluster
+        create: true
+```
+
+Destroy a cluster:
+
+```yaml
+- hosts: localhost
+  gather_facts: false
+  vars:
+    cluster_name: my-cluster
+  roles:
+    - role: clusterdeploy
+      vars:
+        destroy: true
+```
 
 License
 -------

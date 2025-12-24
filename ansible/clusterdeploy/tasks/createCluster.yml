@@ -1,11 +1,20 @@
 # Deploy cluster using ACM
-- name: "Create namespace {{ cluster.namespace }}"
+
+- name: Check if the namespace exists
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Namespace
+    name: "{{ cluster.name }}"
+  register: namespace_check
+  ignore_errors: true
+
+- name: Create namespace if it doesn't exist
   kubernetes.core.k8s:
-    name: "{{ cluster.namespace }}"
+    name: "{{ cluster.name }}"
     api_version: v1
     kind: Namespace
     state: present
-  when: user_provided_credentials
+  when: namespace_check.resources | length == 0
 
 - name: Generate the clusterDeployment template
   ansible.builtin.template:
@@ -19,11 +28,29 @@
     definition: "{{ lookup('template', 'clusterDeployment.yaml.j2') | from_yaml }}"
   register: cd
 
+# MachinePools are only needed for AWS worker nodes to prevent OpenShift installer from
+# automatically substituting instance types (e.g., m6i.xlarge for m5.4xlarge).
+# Note: MachinePools can ONLY be used for worker nodes, NOT control plane nodes.
+# Control plane nodes are managed directly from install-config and cannot use MachinePools.
+# Google and Azure respect the install-config instance types directly.
+- name: Generate the worker MachinePool template
+  ansible.builtin.template:
+    src: machinePool-worker.yaml.j2
+    dest: "{{ deployment_config_dir }}/machinepool-worker.yaml"
+    mode: "0644"
+  when: cloud.provider != 'Google' and cloud.provider != 'Azure'
+
+- name: Create worker MachinePool resource
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'machinePool-worker.yaml.j2') | from_yaml }}"
+  when: cloud.provider != 'Google' and cloud.provider != 'Azure'
+
 - name: Wait for adminKubeconfigSecretRef to be populated
   kubernetes.core.k8s_info:
     api_version: hive.openshift.io/v1
     kind: ClusterDeployment
-    namespace: "{{ cluster.namespace | default('hive') }}"
+    namespace: "{{ cluster.name }}"
     name: '{{ cluster.name }}'
   register: cd_status
   until:
@@ -35,7 +62,7 @@
   kubernetes.core.k8s_info:
     api_version: v1
     kind: Pod
-    namespace: "{{ cluster.namespace | default('hive') }}"
+    namespace: "{{ cluster.name }}"
     label_selectors:
       - 'hive.openshift.io/cluster-deployment-name={{ cluster.name }}'
   register: pod_status
@@ -49,7 +76,7 @@
     api_version: hive.openshift.io/v1
     kind: ClusterDeployment
     name: "{{ cluster.name }}"
-    namespace: "{{ cluster.namespace | default('hive') }}"
+    namespace: "{{ cluster.name }}"
   register: cluster_deployment
 
 - name: Define the secret name as a fact for later use
@@ -61,7 +88,7 @@
     api_version: v1
     kind: Secret
     name: "{{ admin_secret_name }}"
-    namespace: "{{ cluster.namespace | default('hive') }}"
+    namespace: "{{ cluster.name }}"
   register: admin_secret_info
 
 - name: Decode and save kubeconfig to file
@@ -74,19 +101,6 @@
   kubernetes.core.k8s:
     state: present
     definition: "{{ lookup('template', 'managedCluster.yaml.j2') | from_yaml }}"
-
-- name: Create klusterletAddOnConfig
-  kubernetes.core.k8s:
-    state: present
-    definition: "{{ lookup('template', 'klusterletAddOnConfig.yaml.j2') | from_yaml }}"
-
-- name: "Check if the {{ cluster.name }} namespace exists"
-  kubernetes.core.k8s_info:
-    api_version: v1
-    kind: Namespace
-    name: "{{ cluster.name }}"
-  register: namespace_check
-  ignore_errors: true
 
 - name: Create an import secret using the kubeconfig
   kubernetes.core.k8s:
@@ -101,3 +115,8 @@
       data:
         kubeconfig: "{{ lookup('file', '{{ deployment_config_dir }}/kubeconfig') | b64encode }}"
   register: auto_import_secret
+
+- name: Create klusterletAddOnConfig
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'klusterletAddOnConfig.yaml.j2') | from_yaml }}"

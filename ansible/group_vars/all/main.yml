@@ -1,0 +1,40 @@
+---
+# Common variables that apply to all cloud providers
+# These can be overridden by provider-specific group_vars or command-line variables
+
+# Define the cluster's high-level state regardless of the cloud.
+cluster:
+  name: "{{ cluster_name }}"
+  clusterGroup: "{{ cluster_group | default('devops') }}"  # clusterGroup for application deployment to provisioned clusters
+  version: img4.19.9-x86-64-appsub  # oc get clusterimageset
+  # baseDomain is defined per provider in provider-specific group_vars
+  namespace: hive
+  clusterset: default
+
+# This section defines *which* cloud is used and contains common/primary cloud config.
+# The provider and region are typically set via input variables or inventory groups
+cloud:
+  provider: "{{ cloud_provider }}"
+  region: "{{ cloud_region }}"
+
+# Grouping hardware/scaling specs together.
+# machineType is defined per provider in provider-specific group_vars
+machinePools:
+  controlPlane:
+    replicas: "{{ control_plane_replicas }}"
+    # machineType is defined per provider in provider-specific group_vars
+    disk:
+      size: 200  # GB
+      type: gp3  # AWS default, ignored for other providers
+  workers:
+    replicas: "{{ worker_replicas }}"
+    # machineType is defined per provider in provider-specific group_vars
+    disk:
+      size: 200  # GB
+      type: gp3  # AWS default, ignored for other providers
+
+# Common deployment settings
+create: "{{ create_cluster | default('false') }}"
+destroy: "{{ destroy_cluster | default('false') }}"
+debug_task: false
+user_provided_credentials: false

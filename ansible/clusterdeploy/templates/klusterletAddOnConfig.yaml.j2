@@ -2,14 +2,14 @@ apiVersion: agent.open-cluster-management.io/v1
 kind: KlusterletAddonConfig
 metadata:
   name: {{ cluster.name }}
-  namespace: {{ cluster.namespace |default('hive')}}
+  namespace: {{ cluster.name }}
 spec:
   clusterName: {{ cluster.name }}
-  clusterNamespace: {{ cluster.namespace | default('hive')}}
+  clusterNamespace: {{ cluster.name }}
   clusterLabels:
     cloud: auto-detect
-    vendor: auto-detect
-    clusterGroup: {{ cluster.clusterGroup }}
+    vendor: OpenShift
+    clusterGroup: "{{ cluster.clusterGroup }}"
     cluster.open-cluster-management.io/clusterset: default
   applicationManager:
     enabled: true

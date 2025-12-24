@@ -1,0 +1,28 @@
+---
+# Azure-specific configuration variables
+
+# Cloud provider identifier
+cloud:
+  provider: "{{ cloud_provider | default('Azure') }}"
+
+# Azure-specific cluster configuration
+cluster:
+  baseDomain: "{{ cluster_base_domain }}"
+
+# Azure-specific cloud configuration
+cloudConfig:
+  azure:
+    cloudName: "{{ azure_cloud_name | default('AzurePublicCloud') }}"
+    baseDomainResourceGroupName: "{{ azure_resource_group }}"
+
+# Azure-specific machine pool defaults
+# Note: Azure uses osDisk.diskSizeGB instead of rootVolume.size
+machinePools:
+  controlPlane:
+    machineType: "{{ control_plane_machine_type }}"
+    disk:
+      size: 200  # GB (used as diskSizeGB for Azure)
+  workers:
+    machineType: "{{ worker_machine_type }}"
+    disk:
+      size: 200  # GB (used as diskSizeGB for Azure)

@@ -44,3 +44,7 @@ idm_target_collections:
   - name: freeipa.ansible_freeipa
   - name: ansible.posix
 install_collections_on_target: true  # Set to false to skip collection installation on target
+
+# CA Certificate download configuration
+ca_cert_output_dir: "{{ ansible_env.HOME }}/.ansible/certs"  # Directory to save CA certificate on control node
+download_ca_certificate: true  # Set to false to skip CA certificate download

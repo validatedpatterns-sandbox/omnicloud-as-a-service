@@ -14,12 +14,64 @@ aws_region: "us-west-2"
 key_name: "idm"
 ssh_public_key_path: "~/.ssh/id_rsa.pub"
 vpc_security_group_name: "idm-sg"
-allow_cidrs: "0.0.0.0/0"
+allow_cidrs: "0.0.0.0/0"  # Default CIDR for basic rules (SSH, HTTP, HTTPS)
+#
+# ============================================================================
+# Security Group Custom Rules
+# ============================================================================
+# Additional security group rules beyond the defaults (SSH/22, HTTP/80, HTTPS/443)
+# Each rule supports: proto (tcp/udp), from_port, to_port, cidr_ip
+#
+# Examples:
+#   - Allow LDAP from anywhere: {proto: tcp, from_port: 389, to_port: 389, cidr_ip: "0.0.0.0/0"}
+#   - Allow LDAPS from specific IP: {proto: tcp, from_port: 636, to_port: 636, cidr_ip: "10.0.0.0/8"}
+#   - Allow HTTPS from specific range: {proto: tcp, from_port: 443, to_port: 443, cidr_ip: "192.168.1.0/24"}
+security_group_rules_custom:
+  # LDAP (port 389) - allow from anywhere or specific IP range
+  - proto: tcp
+    from_port: 389
+    to_port: 389
+    cidr_ip: "0.0.0.0/0"  # Change to specific IP/range for security, e.g., "10.0.0.0/8"
+  # LDAPS (port 636) - allow from anywhere or specific IP range
+  - proto: tcp
+    from_port: 636
+    to_port: 636
+    cidr_ip: "0.0.0.0/0"  # Change to specific IP/range for security, e.g., "10.0.0.0/8"
+  # HTTPS (port 443)
+  - proto: tcp
+    from_port: 443
+    to_port: 443
+    cidr_ip: "0.0.0.0/0"
+  # Kerberos (port 88) - UDP
+  - proto: udp
+    from_port: 88
+    to_port: 88
+    cidr_ip: "0.0.0.0/0"
+  # HTTPS (port 443) - already in defaults, but can override with specific IP here
+  # Uncomment to restrict HTTPS to specific IP range:
+  # - proto: tcp
+  #   from_port: 443
+  #   to_port: 443
+  #   cidr_ip: "10.0.0.0/8"  # Example: only allow from private network
+# ============================================================================
+# Domain Configuration
+# ============================================================================
+# Base domain - define once, automatically reused for:
+#   - hosted_zone: "{{ domain }}." (Route53 hosted zone with trailing dot)
+#   - ipa_zone: "{{ domain }}" (IPA/FreeIPA domain)
+#   - Instance FQDNs: "{{ hostname_prefix }}.{{ domain }}" (e.g., "idm01.{{ domain }}")
+#
+# To change the domain, update this single variable and all related settings
+# will automatically update.
+domain: "cluster.example.io"
+#
 # ============================================================================
 # Route53 DNS Configuration
 # ============================================================================
-hosted_zone: "cluster.example.com."  # Route53 hosted zone (with trailing dot)
+# Hosted zone is automatically derived from domain (with trailing dot for Route53)
+hosted_zone: "{{ domain }}."
 create_dns_records: true  # Set to false to skip DNS record creation
+#
 # ============================================================================
 # EC2 Instance Configuration
 # ============================================================================
@@ -30,20 +82,29 @@ wait_for_ssh_timeout: 600
 # EC2 Tags
 ec2_tags: "ocaas-idm"
 ec2_role: "idm"
+#
 # ============================================================================
 # IDM Instances Configuration
 # ============================================================================
+# Hostname prefix for IDM instances (used to construct FQDN)
+# Format: hostname_prefix + "." + domain
+idm_hostname_prefix: "idm01"
+#
 ec2_instances_idm:
   - name: "idm-server-01"
     instance_name: "idm-server-01"
     instance_type: "t3.large"
     ec2_role: "idm"
-    fqdn: "idm01.cluster.example.com."  # With trailing dot for Route53
-    fqdn_nodot: "idm01.cluster.example.com"  # Without trailing dot for inventory
+    # FQDNs are automatically constructed from hostname_prefix and domain
+    fqdn: "{{ idm_hostname_prefix }}.{{ domain }}."  # With trailing dot for Route53
+    fqdn_nodot: "{{ idm_hostname_prefix }}.{{ domain }}"  # Without trailing dot for inventory
     groups: ["idm_servers", "ipaservers"]
 # ============================================================================
 # AAP Instances Configuration
 # ============================================================================
+# Hostname prefix for AAP instances
+aap_hostname_prefix: "aap01"
+#
 ec2_instances_aap: []
   # Uncomment and configure as needed:
   # ec2_instances_aap:
@@ -51,12 +112,16 @@ ec2_instances_aap: []
   #     instance_name: "aap-controller-01"
   #     instance_type: "t3.xlarge"
   #     ec2_role: "aap"
-  #     fqdn: "aap01.example.com."
-  #     fqdn_nodot: "aap01.example.com"
+  #     fqdn: "{{ aap_hostname_prefix }}.{{ domain }}."
+  #     fqdn_nodot: "{{ aap_hostname_prefix }}.{{ domain }}"
   #     groups: ["aap_servers"]
+#
 # ============================================================================
 # Satellite Instances Configuration
 # ============================================================================
+# Hostname prefix for Satellite instances
+satellite_hostname_prefix: "sat01"
+#
 ec2_instances_satellite: []
   # Uncomment and configure as needed:
   # ec2_instances_satellite:
@@ -64,14 +129,15 @@ ec2_instances_satellite: []
   #     instance_name: "satellite-server-01"
   #     instance_type: "t3.xlarge"
   #     ec2_role: "satellite"
-  #     fqdn: "sat01.example.com."
-  #     fqdn_nodot: "sat01.example.com"
+  #     fqdn: "{{ satellite_hostname_prefix }}.{{ domain }}."
+  #     fqdn_nodot: "{{ satellite_hostname_prefix }}.{{ domain }}"
   #     groups: ["satellite_servers"]
 # ============================================================================
 # IDM/FreeIPA Configuration
 # ============================================================================
-ipa_zone: "cluster.example.com"
-ipa_pw: "ENTER_SOME_PW"
+# IPA zone is automatically derived from domain
+ipa_zone: "{{ domain }}"
+ipa_pw: "ENTER_SOME_PW" # Do NOT modify to autogenerate
 # IDM Server Configuration
 # Note: ipaserver_hostname is automatically set from fqdn_nodot
 ipaserver_no_host_dns: true
@@ -105,12 +171,9 @@ idm:
     - name: reader
       first: directory
       last: reader
-    - name: fname
+    - name: flastname
       first: first
-      last: name
-    - name: fname
-      first: first
-      last: name
+      last: last
 # ============================================================================
 # Destroy/Delete Configuration
 # ============================================================================

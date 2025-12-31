@@ -1,4 +1,13 @@
 ---
+- name: Generate IDM passwords
+  hosts: localhost
+  gather_facts: true
+  vars_files:
+    - idm-vars.yml
+  tasks:
+    - name: Include password generation tasks
+      ansible.builtin.include_tasks: roles/install-idm/tasks/generate-passwords.yml
+
 - name: Provision EC2 Instances
   hosts: localhost
   gather_facts: false
@@ -13,5 +22,11 @@
   gather_facts: true
   vars_files:
     - idm-vars.yml
+  vars:
+    # Use generated passwords if they exist, otherwise use provided passwords
+    ipa_pw: "{{ hostvars['localhost']['final_ipa_pw'] | default(ipa_pw) }}"
+    ipaadmin_password: "{{ hostvars['localhost']['final_ipaadmin_password'] | default(ipaadmin_password) }}"
+    ipadm_password: "{{ hostvars['localhost']['final_ipadm_password'] | default(ipadm_password) }}"
+    generated_user_passwords: "{{ hostvars['localhost']['generated_user_passwords'] | default({}) }}"
   roles:
     - install-idm

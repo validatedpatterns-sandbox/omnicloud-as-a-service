@@ -169,6 +169,16 @@
   loop: "{{ idm_firewalld_rules }}"
   become: true
 
+- name: Debug passwords before IPA server installation
+  ansible.builtin.debug:
+    msg:
+      - "Passwords being passed to IPA server role:"
+      - "  ipaadmin_password: {{ 'SET (length: ' + (ipaadmin_password | string | length | string) + ')' if ipaadmin_password is defined and ipaadmin_password != '' else 'NOT SET' }}"
+      - "  ipadm_password: {{ 'SET (length: ' + (ipadm_password | string | length | string) + ')' if ipadm_password is defined and ipadm_password != '' else 'NOT SET' }}"
+      - "  ipa_pw: {{ 'SET (length: ' + (ipa_pw | string | length | string) + ')' if ipa_pw is defined and ipa_pw != 'ENTER_SOME_PW' else 'NOT SET' }}"
+  run_once: true
+  no_log: false
+
 - name: Set state for IPA server role
   ansible.builtin.set_fact:
     state: present
@@ -176,6 +186,16 @@
 - name: Include IPA server role
   ansible.builtin.include_role:
     name: freeipa.ansible_freeipa.ipaserver
+
+- name: Debug IDM users configuration
+  ansible.builtin.debug:
+    msg:
+      - "IDM users configuration:"
+      - "  idm_users: {{ idm_users | default('NOT SET') }}"
+      - "  idm.users: {{ idm.users | default('NOT SET') }}"
+      - "  Number of users: {{ idm_users | default([]) | length }}"
+      - "  User names: {{ idm_users | default([]) | map(attribute='name') | list }}"
+  run_once: true
 
 - name: Authenticate as IPA admin for user operations
   ansible.builtin.shell: |
@@ -203,6 +223,11 @@
   environment:
     KRB5CCNAME: "/tmp/krb5cc_ansible_usercheck_{{ ansible_date_time.epoch }}"
 
+- name: Initialize users_to_create list
+  ansible.builtin.set_fact:
+    users_to_create: []
+  when: idm_users | default([]) | length > 0
+
 - name: Build list of users that need to be created
   ansible.builtin.set_fact:
     users_to_create: "{{ users_to_create | default([]) + [item.item] }}"
@@ -212,6 +237,23 @@
     - item.rc != 0  # Only add if user doesn't exist (rc != 0 means user-show failed)
   loop_control:
     label: "{{ item.item.name }}"
+
+- name: Debug users to create
+  ansible.builtin.debug:
+    msg:
+      - "Users to create: {{ users_to_create | default([]) | map(attribute='name') | list }}"
+      - "Total users to create: {{ users_to_create | default([]) | length }}"
+      - "IDM users configured: {{ idm_users | default([]) | map(attribute='name') | list }}"
+  when: idm_users | default([]) | length > 0
+
+- name: Debug generated user passwords
+  ansible.builtin.debug:
+    var: generated_user_passwords
+  when: 
+    - idm_users | default([]) | length > 0
+    - generated_user_passwords is defined
+  no_log: false
+  run_once: true
 
 - name: Create IDM users (passwords set without reset requirement)
   freeipa.ansible_freeipa.ipauser:
@@ -225,7 +267,9 @@
     state: present
   loop: "{{ users_to_create | default([]) }}"
   become: true
-  when: existing_users_check.changed
+  when:
+    - idm_users | default([]) | length > 0
+    - users_to_create | default([]) | length > 0
   loop_control:
     label: "{{ item.name }}"
   register: user_creation_result

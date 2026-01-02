@@ -32,6 +32,6 @@ ldap:
 #
   # Feature flags
   oauth:
-    enabled: true
+    enabled: false
   groupsync:
     enabled: true

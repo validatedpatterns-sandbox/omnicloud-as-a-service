@@ -17,11 +17,11 @@
 #   bindDN: "uid=reader" → Full DN: "uid=reader,cn=users,cn=accounts,dc=aws,dc=validatedpatterns,dc=io"
 ldap:
   # Connection settings
-  url: "ldap://idm01.cluster.example.io"
+  url: "ldap://idm01.aws.validatedpatterns.io"
   insecure: true  # Set to false for LDAPS (ldaps://)
 #
   # Base DN - root of your LDAP tree
-  baseDN: "cn=accounts,dc=cluster,dc=example,dc=io"
+  baseDN: "cn=accounts,dc=aws,dc=validatedpatterns,dc=io"
 #
   # DN Components (relative to baseDN)
   # These are combined with baseDN in chart templates
@@ -32,6 +32,6 @@ ldap:
 #
   # Feature flags
   oauth:
-    enabled: false
+    enabled: true
   groupsync:
-    enabled: false
+    enabled: true

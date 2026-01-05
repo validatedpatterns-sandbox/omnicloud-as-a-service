@@ -8,7 +8,7 @@
 
 If you've followed a link to this repository, but are not really sure what it contains
 or how to use it, head over to [Multicloud GitOps](https://validatedpatterns.io/patterns/multicloud-gitops/)
-for additional context and installation instructions
+for additional context and installation instructions.
 
 ## Rationale
 

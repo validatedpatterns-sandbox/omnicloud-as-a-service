@@ -8,6 +8,18 @@ ssh_public_key_path: "~/.ssh/id_rsa.pub"
 vpc_security_group_name: "bastion-sg"
 allow_cidrs: "0.0.0.0/0"
 
+# Security Group Configuration
+# Default rules are: SSH (22), HTTP (80), HTTPS (443)
+# Add custom rules via security_group_rules_custom variable
+# Example:
+# security_group_rules_custom:
+#   - proto: tcp
+#     from_port: 389
+#     to_port: 389
+#     cidr_ip: "0.0.0.0/0"
+security_group_rules_custom: []
+security_group_description: "Security group for provisioned instances"
+
 # RHEL AMI Configuration
 rhel_ami_owner: "309956199498"  # Red Hat account ID
 

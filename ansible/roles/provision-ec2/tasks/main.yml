@@ -15,12 +15,9 @@
     - not destroy | default(false) | bool
     - ec2_instances_all | length > 0
 
-- name: Ensure security group exists
-  amazon.aws.ec2_group:
-    name: "{{ vpc_security_group_name }}"
-    description: "bastion security group"
-    region: "{{ aws_region }}"
-    rules:
+- name: Set default security group rules
+  ansible.builtin.set_fact:
+    security_group_rules_default:
       - proto: tcp
         from_port: 22
         to_port: 22
@@ -33,6 +30,17 @@
         from_port: 443
         to_port: 443
         cidr_ip: "{{ allow_cidrs }}"
+
+- name: Combine default and custom security group rules
+  ansible.builtin.set_fact:
+    security_group_rules: "{{ security_group_rules_default | default([]) + security_group_rules_custom | default([]) }}"
+
+- name: Ensure security group exists
+  amazon.aws.ec2_group:
+    name: "{{ vpc_security_group_name }}"
+    description: "{{ security_group_description | default('Security group for provisioned instances') }}"
+    region: "{{ aws_region }}"
+    rules: "{{ security_group_rules }}"
   register: sg
   when:
     - not destroy | default(false) | bool
@@ -169,13 +177,50 @@
     - instance_facts[item.item.instance_name | default(item.item.name)] is defined
     - instance_facts[item.item.instance_name | default(item.item.name)].public_ip | length > 0
 
-- name: Fetch host key via ssh-keyscan
+- name: Get list of newly created instance names
+  ansible.builtin.set_fact:
+    newly_created_instance_names: "{{ newly_created_instance_names | default([]) + [item.item.instance_name | default(item.item.name)] }}"
+  loop: "{{ ec2_result.results | default([]) }}"
+  when:
+    - not destroy | default(false) | bool
+    - ec2_result is defined
+    - item.instances is defined
+    - item.instances | length > 0
+
+- name: Wait for SSH to be available (existing instances)
+  ansible.builtin.wait_for:
+    host: "{{ instance_facts[item.instance_name | default(item.name)].public_ip }}"
+    port: 22
+    timeout: "{{ item.wait_for_ssh_timeout | default(wait_for_ssh_timeout) }}"
+    state: started
+  loop: "{{ ec2_instances_all }}"
+  loop_control:
+    label: "{{ item.instance_name | default(item.name) }}"
+  when:
+    - not destroy | default(false) | bool
+    - ec2_instances_all | length > 0
+    - instance_facts is defined
+    - instance_facts[item.instance_name | default(item.name)] is defined
+    - instance_facts[item.instance_name | default(item.name)].public_ip | length > 0
+    - (newly_created_instance_names | default([]) | length == 0) or (item.instance_name | default(item.name) not in newly_created_instance_names)
+
+- name: Pause briefly to ensure SSH is fully ready
+  ansible.builtin.pause:
+    seconds: 5
+  when:
+    - not destroy | default(false) | bool
+    - ec2_instances_all | length > 0
+
+- name: Fetch host key via ssh-keyscan (with retries)
   ansible.builtin.command: "ssh-keyscan -H {{ instance_facts[item.instance_name | default(item.name)].public_ip }}"
   register: scanned_keys
   loop: "{{ ec2_instances_all }}"
   loop_control:
     label: "{{ item.instance_name | default(item.name) }}"
   changed_when: false
+  retries: 5
+  delay: 10
+  until: scanned_keys.rc == 0
   when:
     - not destroy | default(false) | bool
     - ec2_instances_all | length > 0

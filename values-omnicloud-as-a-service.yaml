@@ -19,17 +19,14 @@ ldap:
   # Connection settings
   url: "ldap://idm01.cluster.example.io"
   insecure: true  # Set to false for LDAPS (ldaps://)
-#
   # Base DN - root of your LDAP tree
   baseDN: "cn=accounts,dc=cluster,dc=example,dc=io"
-#
   # DN Components (relative to baseDN)
   # These are combined with baseDN in chart templates
   usersDN: "cn=users"           # Users container RDN
   groupsDN: "cn=groups"          # Groups container RDN
   whitelistDN: "cn=ipausers"     # Group whitelist RDN (relative to groupsDN)
   bindDN: "uid=reader"           # Bind user RDN (relative to usersDN)
-#
   # Feature flags
   oauth:
     enabled: false

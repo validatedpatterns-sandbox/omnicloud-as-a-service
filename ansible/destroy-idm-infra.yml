@@ -1,10 +1,7 @@
 ---
 - name: Destroy EC2 Instances and Resources
   hosts: localhost
-  gather_facts: false
-  collections:
-    - amazon.aws
-    - community.aws
+  gather_facts: true
   vars_files:
     - idm-vars.yml
   vars:
@@ -12,6 +9,137 @@
     # Optionally override these from command line:
     # delete_security_group: true
     # delete_ssh_key: true
-  roles:
-    - provision-ec2
+  tasks:
+    - name: Set passwords directory
+      ansible.builtin.set_fact:
+        passwords_output_dir: "{{ passwords_output_dir | default(lookup('env', 'HOME') + '/.ansible/passwords') }}"
 
+    - name: Find password files for this domain
+      ansible.builtin.find:
+        paths: "{{ passwords_output_dir }}"
+        patterns:
+          - "idm-passwords-{{ ipa_zone | default(domain) | default('*') | replace('.', '-') }}-*.txt"
+          - "idm-passwords-{{ ipa_zone | default(domain) | default('*') | replace('.', '-') }}-*.yml"
+        file_type: file
+      register: password_files
+      when: passwords_output_dir is defined
+      ignore_errors: true
+
+    - name: Display password files to be deleted
+      ansible.builtin.debug:
+        msg:
+          - "Found {{ password_files.files | default([]) | length }} password file(s) to delete:"
+          - "{{ password_files.files | default([]) | map(attribute='path') | list }}"
+      when:
+        - password_files is defined
+        - password_files.files is defined
+        - password_files.files | length > 0
+
+    - name: Remove password files
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ password_files.files | default([]) }}"
+      when:
+        - password_files is defined
+        - password_files.files is defined
+        - password_files.files | length > 0
+      loop_control:
+        label: "{{ item.path | basename }}"
+      register: password_files_deleted
+
+    - name: Summary of password file deletion
+      ansible.builtin.debug:
+        msg:
+          - "Password file cleanup:"
+          - "  Files deleted: {{ password_files_deleted.results | default([]) | selectattr('changed', 'equalto', True) | list | length }}"
+          - "  Domain: {{ ipa_zone | default(domain) }}"
+      when: password_files_deleted is defined
+
+    - name: Set CA certificate directory
+      ansible.builtin.set_fact:
+        ca_cert_output_dir: "{{ ca_cert_output_dir | default(lookup('env', 'HOME') + '/.ansible/certs') }}"
+
+    - name: Find CA certificate files for this domain
+      ansible.builtin.find:
+        paths: "{{ ca_cert_output_dir }}"
+        patterns:
+          - "idm-ca-{{ ipa_zone | default(domain) | default('*') | replace('.', '-') }}-*.crt"
+        file_type: file
+      register: ca_cert_files
+      when: ca_cert_output_dir is defined
+      ignore_errors: true
+
+    - name: Display CA certificate files to be deleted
+      ansible.builtin.debug:
+        msg:
+          - "Found {{ ca_cert_files.files | default([]) | length }} CA certificate file(s) to delete:"
+          - "{{ ca_cert_files.files | default([]) | map(attribute='path') | list }}"
+      when:
+        - ca_cert_files is defined
+        - ca_cert_files.files is defined
+        - ca_cert_files.files | length > 0
+
+    - name: Remove CA certificate files
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ ca_cert_files.files | default([]) }}"
+      when:
+        - ca_cert_files is defined
+        - ca_cert_files.files is defined
+        - ca_cert_files.files | length > 0
+      loop_control:
+        label: "{{ item.path | basename }}"
+      register: ca_cert_files_deleted
+
+    - name: Summary of CA certificate file deletion
+      ansible.builtin.debug:
+        msg:
+          - "CA certificate file cleanup completed:"
+          - "  Files deleted: {{ ca_cert_files_deleted.results | default([]) | selectattr('changed', 'equalto', True) | list | length }}"
+          - "  Domain: {{ ipa_zone | default(domain) }}"
+      when: ca_cert_files_deleted is defined
+
+    - name: Find all files in CA certificate directory
+      ansible.builtin.find:
+        paths: "{{ ca_cert_output_dir }}"
+        file_type: file
+      register: all_ca_cert_files
+      when: ca_cert_output_dir is defined
+      ignore_errors: true
+
+    - name: Display all CA certificate files to be deleted
+      ansible.builtin.debug:
+        msg:
+          - "Found {{ all_ca_cert_files.files | default([]) | length }} file(s) in certs directory to delete:"
+          - "{{ all_ca_cert_files.files | default([]) | map(attribute='path') | list }}"
+      when:
+        - all_ca_cert_files is defined
+        - all_ca_cert_files.files is defined
+        - all_ca_cert_files.files | length > 0
+
+    - name: Remove all files from CA certificate directory
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ all_ca_cert_files.files | default([]) }}"
+      when:
+        - all_ca_cert_files is defined
+        - all_ca_cert_files.files is defined
+        - all_ca_cert_files.files | length > 0
+      loop_control:
+        label: "{{ item.path | basename }}"
+      register: all_ca_cert_files_deleted
+
+    - name: Summary of all CA certificate file deletion
+      ansible.builtin.debug:
+        msg:
+          - "CA certificate directory cleanup completed:"
+          - "  Total files deleted: {{ all_ca_cert_files_deleted.results | default([]) | selectattr('changed', 'equalto', True) | list | length }}"
+          - "  Directory: {{ ca_cert_output_dir }}"
+      when: all_ca_cert_files_deleted is defined
+
+    - name: Include provision-ec2 role for destruction
+      ansible.builtin.include_role:
+        name: provision-ec2

@@ -15,12 +15,9 @@
     - not destroy | default(false) | bool
     - ec2_instances_all | length > 0
 
-- name: Ensure security group exists
-  amazon.aws.ec2_group:
-    name: "{{ vpc_security_group_name }}"
-    description: "bastion security group"
-    region: "{{ aws_region }}"
-    rules:
+- name: Set default security group rules
+  ansible.builtin.set_fact:
+    security_group_rules_default:
       - proto: tcp
         from_port: 22
         to_port: 22
@@ -33,6 +30,17 @@
         from_port: 443
         to_port: 443
         cidr_ip: "{{ allow_cidrs }}"
+
+- name: Combine default and custom security group rules
+  ansible.builtin.set_fact:
+    security_group_rules: "{{ security_group_rules_default | default([]) + security_group_rules_custom | default([]) }}"
+
+- name: Ensure security group exists
+  amazon.aws.ec2_group:
+    name: "{{ vpc_security_group_name }}"
+    description: "{{ security_group_description | default('Security group for provisioned instances') }}"
+    region: "{{ aws_region }}"
+    rules: "{{ security_group_rules }}"
   register: sg
   when:
     - not destroy | default(false) | bool
@@ -169,13 +177,50 @@
     - instance_facts[item.item.instance_name | default(item.item.name)] is defined
     - instance_facts[item.item.instance_name | default(item.item.name)].public_ip | length > 0
 
-- name: Fetch host key via ssh-keyscan
+- name: Get list of newly created instance names
+  ansible.builtin.set_fact:
+    newly_created_instance_names: "{{ newly_created_instance_names | default([]) + [item.item.instance_name | default(item.item.name)] }}"
+  loop: "{{ ec2_result.results | default([]) }}"
+  when:
+    - not destroy | default(false) | bool
+    - ec2_result is defined
+    - item.instances is defined
+    - item.instances | length > 0
+
+- name: Wait for SSH to be available (existing instances)
+  ansible.builtin.wait_for:
+    host: "{{ instance_facts[item.instance_name | default(item.name)].public_ip }}"
+    port: 22
+    timeout: "{{ item.wait_for_ssh_timeout | default(wait_for_ssh_timeout) }}"
+    state: started
+  loop: "{{ ec2_instances_all }}"
+  loop_control:
+    label: "{{ item.instance_name | default(item.name) }}"
+  when:
+    - not destroy | default(false) | bool
+    - ec2_instances_all | length > 0
+    - instance_facts is defined
+    - instance_facts[item.instance_name | default(item.name)] is defined
+    - instance_facts[item.instance_name | default(item.name)].public_ip | length > 0
+    - (newly_created_instance_names | default([]) | length == 0) or (item.instance_name | default(item.name) not in newly_created_instance_names)
+
+- name: Pause briefly to ensure SSH is fully ready
+  ansible.builtin.pause:
+    seconds: 5
+  when:
+    - not destroy | default(false) | bool
+    - ec2_instances_all | length > 0
+
+- name: Fetch host key via ssh-keyscan (with retries)
   ansible.builtin.command: "ssh-keyscan -H {{ instance_facts[item.instance_name | default(item.name)].public_ip }}"
   register: scanned_keys
   loop: "{{ ec2_instances_all }}"
   loop_control:
     label: "{{ item.instance_name | default(item.name) }}"
   changed_when: false
+  retries: 5
+  delay: 10
+  until: scanned_keys.rc == 0
   when:
     - not destroy | default(false) | bool
     - ec2_instances_all | length > 0
@@ -253,12 +298,20 @@
 # Destroy/Delete Tasks
 # ============================================================================
 
-- name: Get all instances to delete
+- name: Debug - Show instances we're looking for
+  ansible.builtin.debug:
+    msg:
+      - "Destroy mode: Looking for {{ ec2_instances_all | length }} instance(s) to delete"
+      - "Instance names: {{ ec2_instances_all | map(attribute='instance_name') | map('default', ec2_instances_all | map(attribute='name')) | list }}"
+  when:
+    - destroy | default(false) | bool
+    - ec2_instances_all | length > 0
+
+- name: Get all instances to delete by Name tag
   amazon.aws.ec2_instance_info:
     region: "{{ aws_region }}"
     filters:
       "tag:Name": "{{ item.instance_name | default(item.name) }}"
-      instance-state-name: [running, stopped, pending, stopping]
   register: instances_to_delete
   loop: "{{ ec2_instances_all }}"
   loop_control:
@@ -266,6 +319,51 @@
   when:
     - destroy | default(false) | bool
     - ec2_instances_all | length > 0
+
+- name: Debug - Show instances found for deletion
+  ansible.builtin.debug:
+    msg:
+      - "Instance name: {{ item.item.instance_name | default(item.item.name) }}"
+      - "Found {{ item.instances | default([]) | length }} instance(s)"
+      - "Instance IDs: {{ item.instances | default([]) | map(attribute='instance_id') | list }}"
+      - "Instance States: {{ item.instances | default([]) | map(attribute='state.name') | list }}"
+  loop: "{{ instances_to_delete.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.instance_name | default(item.item.name) }}"
+  when:
+    - destroy | default(false) | bool
+    - instances_to_delete is defined
+
+- name: Count total instances found
+  ansible.builtin.set_fact:
+    total_instances_found: "{{ total_instances_found | default(0) + (item.instances | default([]) | length) }}"
+  loop: "{{ instances_to_delete.results | default([]) }}"
+  when:
+    - destroy | default(false) | bool
+    - instances_to_delete is defined
+
+- name: Warn if no instances found
+  ansible.builtin.debug:
+    msg: "WARNING: No instances found to delete. Check that instance names match the Name tags on your EC2 instances."
+  when:
+    - destroy | default(false) | bool
+    - instances_to_delete is defined
+    - total_instances_found | default(0) == 0
+
+- name: Filter out terminated instances before deletion
+  ansible.builtin.set_fact:
+    instances_to_delete_filtered: "{{ instances_to_delete_filtered | default([]) + [item | combine({'instances': item.instances | default([]) | selectattr('state.name', 'ne', 'terminated') | list})] }}"
+  loop: "{{ instances_to_delete.results | default([]) }}"
+  when:
+    - destroy | default(false) | bool
+    - instances_to_delete is defined
+
+- name: Update instances_to_delete with filtered results
+  ansible.builtin.set_fact:
+    instances_to_delete: "{{ instances_to_delete | combine({'results': instances_to_delete_filtered | default([])}) }}"
+  when:
+    - destroy | default(false) | bool
+    - instances_to_delete_filtered is defined
 
 - name: Set fact for instances found to delete
   ansible.builtin.set_fact:
@@ -295,12 +393,27 @@
     - item.item.fqdn is defined or item.item.fqdn_nodot is defined
   ignore_errors: true
 
+- name: Debug - Show instance IDs to terminate
+  ansible.builtin.debug:
+    msg:
+      - "Instance name: {{ item.item.instance_name | default(item.item.name) }}"
+      - "Instances found: {{ item.instances | default([]) | length }}"
+      - "Instance IDs to terminate: {{ item.instances | default([]) | map(attribute='instance_id') | list }}"
+      - "Instance states: {{ item.instances | default([]) | map(attribute='state.name') | list }}"
+  loop: "{{ instances_to_delete.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.instance_name | default(item.item.name) }}"
+  when:
+    - destroy | default(false) | bool
+    - instances_to_delete is defined
+
 - name: Terminate EC2 instances
   amazon.aws.ec2_instance:
     instance_ids: "{{ item.instances | map(attribute='instance_id') | list }}"
     state: absent
     wait: true
     wait_timeout: 600
+    region: "{{ aws_region }}"
   loop: "{{ instances_to_delete.results | default([]) }}"
   loop_control:
     label: "{{ item.item.instance_name | default(item.item.name) }}"

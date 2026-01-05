@@ -33,17 +33,26 @@
     mode: '0644'
   become: true
 
+- name: Get current static hostname
+  ansible.builtin.command:
+    cmd: hostnamectl --static
+  register: current_hostname
+  changed_when: false
+  failed_when: false
+
 - name: Set hostname using hostnamectl (transient)
   ansible.builtin.command:
     cmd: hostnamectl set-hostname "{{ target_hostname }}"
   become: true
-  changed_when: true
+  when: current_hostname.stdout != target_hostname
+  changed_when: current_hostname.stdout != target_hostname
 
 - name: Set hostname using hostnamectl (static)
   ansible.builtin.command:
     cmd: hostnamectl set-hostname --static "{{ target_hostname }}"
   become: true
-  changed_when: true
+  when: current_hostname.stdout != target_hostname
+  changed_when: current_hostname.stdout != target_hostname
 
 - name: Set hostname in /etc/hostname
   ansible.builtin.copy:
@@ -51,22 +60,28 @@
     content: "{{ target_hostname }}\n"
     mode: '0644'
   become: true
+  when: current_hostname.stdout != target_hostname
 
-- name: Remove old hostname entry from /etc/hosts
+- name: Check if hostname entry exists in /etc/hosts
   ansible.builtin.lineinfile:
     path: /etc/hosts
-    regexp: "^{{ ansible_default_ipv4.address | default('127.0.0.1') }}\\s+.*"
-    state: absent
-  become: true
-  when: ansible_default_ipv4.address is defined
-
-- name: Add hostname to /etc/hosts
-  ansible.builtin.lineinfile:
-    path: /etc/hosts
-    line: "{{ ansible_default_ipv4.address | default('127.0.0.1') }}\t{{ target_hostname }}"
+    regexp: "^{{ ansible_default_ipv4.address | default('127.0.0.1') }}\\s+{{ target_hostname }}(\\s|$)"
     state: present
+    line: "{{ ansible_default_ipv4.address | default('127.0.0.1') }}\t{{ target_hostname }}"
     backup: true
   become: true
+  register: hosts_entry_result
+  when: ansible_default_ipv4.address is defined
+
+- name: Remove old hostname entries from /etc/hosts (if IP changed)
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: "^{{ ansible_default_ipv4.address | default('127.0.0.1') }}\\s+(?!{{ target_hostname }}).*"
+    state: absent
+  become: true
+  when:
+    - ansible_default_ipv4.address is defined
+    - hosts_entry_result.changed | default(false)
 
 - name: Verify hostname is set
   ansible.builtin.command:
@@ -104,17 +119,33 @@
     - install_collections_on_target | default(true) | bool
     - ansible_galaxy_check.rc != 0
 
-- name: Install Ansible collections on target node
+- name: Check if Ansible collections are already installed
   ansible.builtin.command:
-    cmd: "ansible-galaxy collection install {{ item.name }}"
+    cmd: "ansible-galaxy collection list {{ item.name }}"
   loop: "{{ idm_target_collections | default([]) }}"
   become: true
+  register: collection_check_result
+  changed_when: false
+  failed_when: false
   when:
     - install_collections_on_target | default(true) | bool
     - idm_target_collections is defined
     - idm_target_collections | length > 0
   loop_control:
     label: "{{ item.name }}"
+
+- name: Install Ansible collections on target node (only if not already installed)
+  ansible.builtin.command:
+    cmd: "ansible-galaxy collection install {{ item.item.name }}"
+  loop: "{{ collection_check_result.results | default([]) }}"
+  become: true
+  when:
+    - install_collections_on_target | default(true) | bool
+    - idm_target_collections is defined
+    - idm_target_collections | length > 0
+    - item.rc != 0 or item.item.name not in (item.stdout | default(''))
+  loop_control:
+    label: "{{ item.item.name }}"
 
 - name: Install required packages
   ansible.builtin.package:
@@ -138,6 +169,16 @@
   loop: "{{ idm_firewalld_rules }}"
   become: true
 
+- name: Debug passwords before IPA server installation
+  ansible.builtin.debug:
+    msg:
+      - "Passwords being passed to IPA server role:"
+      - "  ipaadmin_password: {{ 'SET (length: ' + (ipaadmin_password | string | length | string) + ')' if ipaadmin_password is defined and ipaadmin_password != '' else 'NOT SET' }}"
+      - "  ipadm_password: {{ 'SET (length: ' + (ipadm_password | string | length | string) + ')' if ipadm_password is defined and ipadm_password != '' else 'NOT SET' }}"
+      - "  ipa_pw: {{ 'SET (length: ' + (ipa_pw | string | length | string) + ')' if ipa_pw is defined and ipa_pw != 'ENTER_SOME_PW' else 'NOT SET' }}"
+  run_once: true
+  no_log: false
+
 - name: Set state for IPA server role
   ansible.builtin.set_fact:
     state: present
@@ -146,15 +187,271 @@
   ansible.builtin.include_role:
     name: freeipa.ansible_freeipa.ipaserver
 
-- name: Create IDM users
+- name: Debug IDM users configuration
+  ansible.builtin.debug:
+    msg:
+      - "IDM users configuration:"
+      - "  idm_users: {{ idm_users | default('NOT SET') }}"
+      - "  idm.users: {{ idm.users | default('NOT SET') }}"
+      - "  Number of users: {{ idm_users | default([]) | length }}"
+      - "  User names: {{ idm_users | default([]) | map(attribute='name') | list }}"
+  run_once: true
+
+- name: Authenticate as IPA admin for user operations
+  ansible.builtin.shell: |
+    echo "{{ ipaadmin_password }}" | kinit admin@{{ ipaserver_realm }}
+  become: true
+  when: idm_users | default([]) | length > 0
+  register: kinit_user_check
+  changed_when: false
+  failed_when: kinit_user_check.rc != 0
+  no_log: true
+  environment:
+    KRB5CCNAME: "/tmp/krb5cc_ansible_usercheck_{{ ansible_date_time.epoch }}"
+
+- name: Check if IDM users already exist
+  ansible.builtin.command:
+    cmd: ipa user-show "{{ item.name }}" --all 2>/dev/null
+  loop: "{{ idm_users }}"
+  become: true
+  register: existing_users_check
+  changed_when: false
+  failed_when: false
+  when: idm_users | default([]) | length > 0
+  loop_control:
+    label: "{{ item.name }}"
+  environment:
+    KRB5CCNAME: "/tmp/krb5cc_ansible_usercheck_{{ ansible_date_time.epoch }}"
+
+- name: Initialize users_to_create list
+  ansible.builtin.set_fact:
+    users_to_create: []
+  when: idm_users | default([]) | length > 0
+
+- name: Build list of users that need to be created
+  ansible.builtin.set_fact:
+    users_to_create: "{{ users_to_create | default([]) + [item.item] }}"
+  loop: "{{ existing_users_check.results | default([]) }}"
+  when:
+    - idm_users | default([]) | length > 0
+    - item.rc != 0  # Only add if user doesn't exist (rc != 0 means user-show failed)
+  loop_control:
+    label: "{{ item.item.name }}"
+
+- name: Debug users to create
+  ansible.builtin.debug:
+    msg:
+      - "Users to create: {{ users_to_create | default([]) | map(attribute='name') | list }}"
+      - "Total users to create: {{ users_to_create | default([]) | length }}"
+      - "IDM users configured: {{ idm_users | default([]) | map(attribute='name') | list }}"
+  when: idm_users | default([]) | length > 0
+
+- name: Debug generated user passwords
+  ansible.builtin.debug:
+    var: generated_user_passwords
+  when: 
+    - idm_users | default([]) | length > 0
+    - generated_user_passwords is defined
+  no_log: false
+  run_once: true
+
+- name: Create IDM users (passwords set without reset requirement)
   freeipa.ansible_freeipa.ipauser:
     name: "{{ item.name }}"
     first: "{{ item.first }}"
     last: "{{ item.last }}"
+    password: "{{ generated_user_passwords[item.name] | default(item.password | default('')) }}"
+    # Setting a specific password (not random) prevents password reset requirement
+    # Only create users that don't exist (idempotent)
     ipaadmin_password: "{{ ipaadmin_password }}"
+    state: present
+  loop: "{{ users_to_create | default([]) }}"
+  become: true
+  when:
+    - idm_users | default([]) | length > 0
+    - users_to_create | default([]) | length > 0
+  loop_control:
+    label: "{{ item.name }}"
+  register: user_creation_result
+
+- name: Authenticate as IPA admin for user modifications
+  ansible.builtin.shell: |
+    echo "{{ ipaadmin_password }}" | kinit admin@{{ ipaserver_realm }}
+  become: true
+  when: idm_users | default([]) | length > 0
+  register: kinit_result
+  changed_when: false
+  failed_when: kinit_result.rc != 0
+  no_log: true
+  environment:
+    KRB5CCNAME: "/tmp/krb5cc_ansible_{{ ansible_date_time.epoch }}"
+
+- name: Check current password expiration for IDM users
+  ansible.builtin.command:
+    cmd: |
+      ipa user-show "{{ item.name }}" --all --raw 2>/dev/null | grep -E "^  krbpasswordexpiration:" || echo "none"
   loop: "{{ idm_users }}"
   become: true
   when: idm_users | default([]) | length > 0
   loop_control:
     label: "{{ item.name }}"
+  register: current_password_expiration
+  changed_when: false
+  failed_when: false
+  environment:
+    KRB5CCNAME: "/tmp/krb5cc_ansible_{{ ansible_date_time.epoch }}"
+
+- name: Clear password expiration for IDM users (prevents password reset on first login)
+  ansible.builtin.shell: |
+    ipa user-mod "{{ item.item.name }}" --setattr=krbpasswordexpiration=
+  loop: "{{ current_password_expiration.results | default([]) }}"
+  become: true
+  when:
+    - idm_users | default([]) | length > 0
+    - item.stdout is defined
+    - item.stdout != "none"
+    - item.stdout | regex_search('krbpasswordexpiration:')
+  loop_control:
+    label: "{{ item.item.name }}"
+  register: password_expiration_result
+  changed_when: password_expiration_result.rc == 0
+  failed_when: password_expiration_result.rc != 0
+  environment:
+    KRB5CCNAME: "/tmp/krb5cc_ansible_{{ ansible_date_time.epoch }}"
+
+- name: Wait for IPA web interface to be ready
+  ansible.builtin.uri:
+    url: "https://{{ target_hostname }}/ipa/config/ca.crt"
+    method: GET
+    status_code: [200]
+    validate_certs: false
+    timeout: 30
+  register: ca_cert_check
+  until: ca_cert_check.status == 200
+  retries: 10
+  delay: 30
+  ignore_errors: true
+  when: download_ca_certificate | default(true) | bool
+
+- name: Download IDM CA certificate from server
+  ansible.builtin.get_url:
+    url: "https://{{ target_hostname }}/ipa/config/ca.crt"
+    dest: "/etc/ipa/ca.crt"
+    mode: '0644'
+    validate_certs: false
+    timeout: 30
+  become: true
+  register: ca_cert_download
+  when:
+    - download_ca_certificate | default(true) | bool
+    - ca_cert_check.status == 200
+
+#- name: Get current user home directory on localhost
+#  ansible.builtin.command:
+#    cmd: echo $HOME
+#  delegate_to: localhost
+#  become: false
+#  run_once: true
+#  register: local_home_ca
+#  changed_when: false
+#  when: download_ca_certificate | default(true) | bool
+
+- name: Set CA certificate directory on control node
+  ansible.builtin.set_fact:
+    ca_cert_output_dir: "{{ lookup('env', 'HOME') + '/.ansible/certs' }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  when: download_ca_certificate | default(true) | bool
+
+- name: Ensure CA certificate directory exists on control node
+  ansible.builtin.file:
+    path: "{{ ca_cert_output_dir }}"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  become: false
+  run_once: true
+  when: download_ca_certificate | default(true) | bool
+
+- name: Set CA certificate file identifier (without timestamp for idempotency)
+  ansible.builtin.set_fact:
+    ca_cert_file_id: "{{ ipa_zone | default(domain) | default('idm') | replace('.', '-') }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  when: download_ca_certificate | default(true) | bool
+
+- name: Set CA certificate file paths
+  ansible.builtin.set_fact:
+    ca_cert_latest_symlink: "{{ ca_cert_output_dir }}/idm-ca-{{ ca_cert_file_id }}-latest.crt"
+    ca_cert_file_pattern: "idm-ca-{{ ca_cert_file_id }}-*.crt"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  when: download_ca_certificate | default(true) | bool
+
+- name: Check if CA certificate symlink already exists
+  ansible.builtin.stat:
+    path: "{{ ca_cert_latest_symlink }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  register: ca_cert_symlink_stat
+  when: download_ca_certificate | default(true) | bool
+
+- name: Check if symlink target file exists
+  ansible.builtin.stat:
+    path: "{{ ca_cert_symlink_stat.stat.lnk_target | default('') }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  register: ca_cert_target_stat
+  when:
+    - download_ca_certificate | default(true) | bool
+    - ca_cert_symlink_stat.stat.exists | default(false)
+    - ca_cert_symlink_stat.stat.lnk_target is defined
+
+- name: Download IDM CA certificate to control node (only if not exists)
+  ansible.builtin.get_url:
+    url: "https://{{ target_hostname }}/ipa/config/ca.crt"
+    dest: "{{ ca_cert_output_dir }}/idm-ca-{{ ca_cert_file_id }}-{{ ansible_date_time.epoch }}.crt"
+    mode: '0644'
+    validate_certs: false
+    timeout: 30
+  delegate_to: localhost
+  run_once: true
+  register: ca_cert_local_download
+  become: false
+  when:
+    - download_ca_certificate | default(true) | bool
+    - ca_cert_check.status == 200
+    - not (ca_cert_symlink_stat.stat.exists | default(false) and ca_cert_target_stat.stat.exists | default(false))
+
+- name: Create symlink to latest CA certificate
+  ansible.builtin.file:
+    src: "{{ ca_cert_local_download.dest }}"
+    dest: "{{ ca_cert_latest_symlink }}"
+    state: link
+  delegate_to: localhost
+  become: false
+  run_once: true
+  when:
+    - download_ca_certificate | default(true) | bool
+    - ca_cert_local_download is defined
+    - ca_cert_local_download.changed | default(false) or not ca_cert_symlink_stat.stat.exists | default(false)
+
+- name: Display CA certificate location
+  ansible.builtin.debug:
+    msg:
+      - "IDM CA Certificate downloaded:"
+      - "  On server: /etc/ipa/ca.crt"
+      - "  On control node: {{ ca_cert_local_download.dest | default('not downloaded') }}"
+      - "  Latest symlink: {{ ca_cert_output_dir }}/idm-ca-{{ ipa_zone | default(domain) | default('idm') | replace('.', '-') }}-latest.crt"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  when:
+    - download_ca_certificate | default(true) | bool
+    - ca_cert_local_download is defined
 

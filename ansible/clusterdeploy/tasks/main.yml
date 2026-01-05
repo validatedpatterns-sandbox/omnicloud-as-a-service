@@ -5,11 +5,33 @@
     name: "{{ cluster.name }}"
     state: directory
     mode: "0755"
-  when: create or debug_task
+  when:
+    - (create or debug_task)
+    - not (clusterdeploy_destroy | default(false) | bool)
 
 - name: "Set deployment_config_dir fact"
   ansible.builtin.set_fact:
     deployment_config_dir: "{{ cluster.name }}"
+
+- name: "Set cluster namespace default if not set"
+  ansible.builtin.set_fact:
+    cluster: "{{ cluster | combine({'namespace': cluster.namespace | default('hive')}) }}"
+  when: cluster.namespace is not defined
+
+- name: Set destroy flag based on create_cluster and destroy_cluster
+  ansible.builtin.set_fact:
+    clusterdeploy_destroy: >-
+      {{
+        (clusterdeploy_destroy_cluster | default(destroy_cluster | default(false)) | bool)
+        and not (create_cluster | default(false) | bool)
+      }}
+
+- name: "Copy provider secrets from hive namespace - if not using user_provided_credentials"
+  ansible.builtin.include_tasks: copy-provider-secrets.yml
+  when:
+    - create
+    - not (clusterdeploy_destroy | default(false) | bool)
+    - not user_provided_credentials | default(false)
 
 - name: "Create cluster secrets - if using user_provided_credentials"
   ansible.builtin.include_tasks: clusterSecrets.yml
@@ -17,16 +39,20 @@
 
 - name: "Generate install-config for the clusterdeployment"
   ansible.builtin.include_tasks: create-install-config.yml
-  when: create or debug_task
+  when:
+    - (create or debug_task)
+    - not (clusterdeploy_destroy | default(false) | bool)
 
 - name: "Create cluster tasks"
   ansible.builtin.include_tasks: createCluster.yml
-  when: create
+  when:
+    - create
+    - not (clusterdeploy_destroy | default(false) | bool)
 
-# - name: "Destroy cluster tasks"
-#  ansible.builtin.include_tasks: destroyCluster.yml
-#  when: destroy
-#
+- name: Destroy cluster tasks
+  ansible.builtin.include_tasks: destroyCluster.yml
+  when: clusterdeploy_destroy | default(false) | bool
+
 # - name: "Run debug play"
 #  ansible.builtin.include_tasks: debug_task.yml
 #  when: debug_task

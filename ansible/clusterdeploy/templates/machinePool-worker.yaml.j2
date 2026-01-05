@@ -1,0 +1,27 @@
+---
+apiVersion: hive.openshift.io/v1
+kind: MachinePool
+metadata:
+  name: {{ cluster.name }}-worker
+  namespace: {{ cluster.name }}
+spec:
+  clusterDeploymentRef:
+    name: {{ cluster.name }}
+  name: worker
+  replicas: {{ machinePools.workers.replicas }}
+  platform:
+{% if cloud.provider == 'Azure' %}
+    azure:
+      osDisk:
+        diskSizeGB: {{ machinePools.workers.disk.size }}
+      type: {{ machinePools.workers.machineType }}
+{% elif cloud.provider == 'Google' %}
+    gcp:
+      type: {{ machinePools.workers.machineType }}
+{% else %}
+    aws:
+      rootVolume:
+        size: {{ machinePools.workers.disk.size }}
+        type: {{ machinePools.workers.disk.type | default('gp3') }}
+      type: {{ machinePools.workers.machineType }}
+{% endif %}

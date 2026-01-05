@@ -1,40 +1,152 @@
 ---
-- name: "Remove managedCluser resource {{ cluster.name }}"
-  kubernetes.core.k8s:
-    state: absent
-    api_version: cluster.open-cluster-management.io/v1
-    kind: ManagedCluster
-    wait: false
-  when: destroy
-
-- name: "Destroy {{ cluster.name }}"
-  kubernetes.core.k8s:
-    state: absent
-    api_version: hive.openshift.io/v1
-    kind: ClusterDeployment
-    name: "{{ cluster.name }}"
-    namespace: "{{ cluster.namespace | default('hive') }}"
-    wait: false
-  register: destroy_cluster
-  when: destroy
-
-- name: "Wait for ClusterDeployment to be fully deleted: {{ cluster.name }}"
+# Query ClusterDeployment to find its namespace
+# Try cluster name namespace first (most common), then hive namespace
+- name: Find ClusterDeployment in cluster namespace
   kubernetes.core.k8s_info:
     api_version: hive.openshift.io/v1
     kind: ClusterDeployment
     name: "{{ cluster.name }}"
-    namespace: "{{ cluster.namespace | default('hive') }}"
+    namespace: "{{ cluster.name }}"
+  register: cluster_deployment_info_cluster_ns
+  ignore_errors: true
+  when: clusterdeploy_destroy
+
+- name: Find ClusterDeployment in hive namespace
+  kubernetes.core.k8s_info:
+    api_version: hive.openshift.io/v1
+    kind: ClusterDeployment
+    name: "{{ cluster.name }}"
+    namespace: "hive"
+  register: cluster_deployment_info_hive_ns
+  ignore_errors: true
+  when: clusterdeploy_destroy
+
+- name: Set cluster namespace from found ClusterDeployment
+  ansible.builtin.set_fact:
+    cluster_namespace: >-
+      {{
+        cluster_deployment_info_cluster_ns.resources[0].metadata.namespace
+        if (cluster_deployment_info_cluster_ns.resources is defined
+            and cluster_deployment_info_cluster_ns.resources | length > 0)
+        else (
+          cluster_deployment_info_hive_ns.resources[0].metadata.namespace
+          if (cluster_deployment_info_hive_ns.resources is defined
+              and cluster_deployment_info_hive_ns.resources | length > 0)
+          else cluster.name
+        )
+      }}
+  when: clusterdeploy_destroy
+
+- name: Set cluster deployment info register
+  ansible.builtin.set_fact:
+    cluster_deployment_info: >-
+      {{
+        cluster_deployment_info_cluster_ns
+        if (cluster_deployment_info_cluster_ns.resources is defined
+            and cluster_deployment_info_cluster_ns.resources | length > 0)
+        else cluster_deployment_info_hive_ns
+      }}
+  when: clusterdeploy_destroy
+
+# Remove ClusterDeployment (first main resource)
+- name: Destroy ClusterDeployment in namespace
+  kubernetes.core.k8s:
+    state: absent
+    api_version: hive.openshift.io/v1
+    kind: ClusterDeployment
+    name: "{{ cluster.name }}"
+    namespace: "{{ cluster_namespace }}"
+    wait: false
+  register: destroy_cluster
+  when: clusterdeploy_destroy
+
+- name: Wait for ClusterDeployment to be fully deleted
+  kubernetes.core.k8s_info:
+    api_version: hive.openshift.io/v1
+    kind: ClusterDeployment
+    name: "{{ cluster.name }}"
+    namespace: "{{ cluster_namespace }}"
   register: deletion_status
   until:
     - deletion_status.resources is not defined or deletion_status.resources | length == 0
   retries: 120
   delay: 10
-  when: destroy
+  ignore_errors: true
+  when: clusterdeploy_destroy
 
-- name: "Remove {{ deployment_config_dir }}"
-  ansible.builtin.file:
+# Remove ManagedCluster (second main resource)
+- name: Remove ManagedCluster
+  kubernetes.core.k8s:
     state: absent
-    path: "{{ deployment_config_dir }}"
+    api_version: cluster.open-cluster-management.io/v1
+    kind: ManagedCluster
+    name: "{{ cluster.name }}"
+    wait: false
+  failed_when: false
+  when: clusterdeploy_destroy
+
+# Wait for ManagedCluster to be fully deleted
+- name: Wait for ManagedCluster to be fully deleted
+  kubernetes.core.k8s_info:
+    api_version: cluster.open-cluster-management.io/v1
+    kind: ManagedCluster
+    name: "{{ cluster.name }}"
+  register: managedcluster_deletion_status
+  until:
+    - managedcluster_deletion_status.resources is not defined or managedcluster_deletion_status.resources | length == 0
+  retries: 120
+  delay: 10
+  ignore_errors: true
+  when: clusterdeploy_destroy
+
+# Verify ClusterDeployment and ManagedCluster are gone, then confirm namespace is removed
+- name: Final check - Verify ClusterDeployment is deleted
+  kubernetes.core.k8s_info:
+    api_version: hive.openshift.io/v1
+    kind: ClusterDeployment
+    name: "{{ cluster.name }}"
+    namespace: "{{ cluster_namespace }}"
+  register: final_clusterdeployment_check
+  ignore_errors: true
   when:
     - destroy
-    - deletion_status is succeeded
+    - cluster.name != 'hive'
+    - cluster_namespace != 'hive'
+
+- name: Final check - Verify ManagedCluster is deleted
+  kubernetes.core.k8s_info:
+    api_version: cluster.open-cluster-management.io/v1
+    kind: ManagedCluster
+    name: "{{ cluster.name }}"
+  register: final_managedcluster_check
+  ignore_errors: true
+  when:
+    - destroy
+    - cluster.name != 'hive'
+
+# Confirm namespace is removed after both ClusterDeployment and ManagedCluster are gone
+- name: Confirm namespace has been removed
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Namespace
+    name: "{{ cluster_namespace }}"
+  register: namespace_status
+  until:
+    - namespace_status.resources is not defined or namespace_status.resources | length == 0
+  retries: 60
+  delay: 10
+  ignore_errors: true
+  when:
+    - destroy
+    - cluster.name != 'hive'
+    - cluster_namespace != 'hive'
+    - final_clusterdeployment_check.resources is not defined or final_clusterdeployment_check.resources | length == 0
+    - final_managedcluster_check.resources is not defined or final_managedcluster_check.resources | length == 0
+
+# Remove deployment config directory if it exists locally
+- name: Remove deployment directory
+  ansible.builtin.file:
+    state: absent
+    path: "{{ cluster.name }}"
+  failed_when: false
+  when: clusterdeploy_destroy

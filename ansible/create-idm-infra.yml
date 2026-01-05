@@ -1,10 +1,34 @@
 ---
+- name: Generate IDM passwords
+  hosts: localhost
+  gather_facts: true
+  vars_files:
+    - idm-vars.yml
+  tasks:
+    - name: Include password generation tasks
+      ansible.builtin.include_tasks: roles/install-idm/tasks/generate-passwords.yml
+
+    - name: Store passwords in a fact file for cross-play access  # noqa: run-once
+      ansible.builtin.copy:
+        dest: >-
+          {{ lookup('env', 'HOME') }}/.ansible/passwords/
+          idm-passwords-facts-{{ ipa_zone | default(domain) | default('idm') | replace('.', '-') }}.json
+        content: |
+          {
+            "final_ipa_pw": "{{ final_ipa_pw }}",
+            "final_ipaadmin_password": "{{ final_ipaadmin_password }}",
+            "final_ipadm_password": "{{ final_ipadm_password }}",
+            "generated_user_passwords": {{ generated_user_passwords | default({}) | to_json }}
+          }
+        mode: '0600'
+      delegate_to: localhost
+      become: false
+      run_once: true  # noqa: run-once
+      when: final_ipa_pw is defined
+
 - name: Provision EC2 Instances
   hosts: localhost
   gather_facts: false
-  collections:
-    - amazon.aws
-    - community.aws
   vars_files:
     - idm-vars.yml
   roles:
@@ -14,11 +38,104 @@
   hosts: idm_servers
   become: true
   gather_facts: true
-  collections:
-    - freeipa.ansible_freeipa
-    - ansible.posix
   vars_files:
     - idm-vars.yml
-  roles:
-    - install-idm
+  vars:
+    passwords_fact_file: >-
+      {{ lookup('env', 'HOME') }}/.ansible/passwords/
+      idm-passwords-facts-{{ ipa_zone | default(domain) | default('idm') | replace('.', '-') }}.json
+  tasks:
+    - name: Check if password fact file exists  # noqa: run-once
+      ansible.builtin.stat:
+        path: "{{ passwords_fact_file }}"
+      delegate_to: localhost
+      become: false
+      run_once: true  # noqa: run-once
+      register: passwords_fact_file_stat
 
+    - name: Load passwords from fact file if it exists  # noqa: run-once
+      ansible.builtin.set_fact:
+        loaded_passwords: "{{ lookup('file', passwords_fact_file) | from_json }}"
+      delegate_to: localhost
+      become: false
+      run_once: true  # noqa: run-once
+      when: passwords_fact_file_stat.stat.exists | default(false)
+      failed_when: false
+
+    - name: Set password variables from loaded facts or hostvars  # noqa: run-once
+      ansible.builtin.set_fact:
+        ipa_pw: >-
+          {{ loaded_passwords.final_ipa_pw | default(
+            hostvars.get('localhost', {}).get('final_ipa_pw',
+            hostvars.get('127.0.0.1', {}).get('final_ipa_pw',
+            ipa_pw | default('ENTER_SOME_PW')))) }}
+        ipaadmin_password: >-
+          {{ loaded_passwords.final_ipaadmin_password | default(
+            hostvars.get('localhost', {}).get('final_ipaadmin_password',
+            hostvars.get('127.0.0.1', {}).get('final_ipaadmin_password',
+            ipaadmin_password | default(ipa_pw)))) }}
+        ipadm_password: >-
+          {{ loaded_passwords.final_ipadm_password | default(
+            hostvars.get('localhost', {}).get('final_ipadm_password',
+            hostvars.get('127.0.0.1', {}).get('final_ipadm_password',
+            ipadm_password | default(ipa_pw)))) }}
+        generated_user_passwords: >-
+          {{ loaded_passwords.generated_user_passwords | default(
+            hostvars.get('localhost', {}).get('generated_user_passwords',
+            hostvars.get('127.0.0.1', {}).get('generated_user_passwords', {}))) }}
+      run_once: true  # noqa: run-once
+
+    - name: Debug password variables being used  # noqa: run-once
+      ansible.builtin.debug:
+        msg:
+          - "Password variables for installation:"
+          - >-
+            ipa_pw: {{ 'SET (length: ' + (ipa_pw | string | length | string) + ')'
+            if ipa_pw != 'ENTER_SOME_PW' else 'NOT SET (using default)' }}
+          - >-
+            ipaadmin_password: {{ 'SET (length: ' +
+            (ipaadmin_password | string | length | string) + ')' if
+            ipaadmin_password is defined and ipaadmin_password != '' else 'NOT SET' }}
+          - >-
+            ipadm_password: {{ 'SET (length: ' +
+            (ipadm_password | string | length | string) + ')' if ipadm_password is
+            defined and ipadm_password != '' else 'NOT SET' }}
+          - >-
+            generated_user_passwords: {{ 'SET (' +
+            (generated_user_passwords | default({}) | length | string) + ' users)'
+            if generated_user_passwords is defined and
+            generated_user_passwords | default({}) | length > 0 else 'NOT SET' }}
+          - "Source: {{ 'fact file' if loaded_passwords is defined else 'hostvars' }}"
+      no_log: false
+      run_once: true  # noqa: run-once
+
+    - name: Debug user passwords available  # noqa: run-once
+      ansible.builtin.debug:
+        var: generated_user_passwords
+      when: >-
+        generated_user_passwords is defined and
+        generated_user_passwords | default({}) | length > 0
+      no_log: false
+      run_once: true  # noqa: run-once
+
+    - name: Fail if passwords are not set correctly  # noqa: run-once
+      ansible.builtin.fail:
+        msg: |
+          Passwords are not set correctly!
+          ipa_pw={{ ipa_pw }}
+          ipaadmin_password={{ ipaadmin_password | default('NOT SET') }}
+          ipadm_password={{ ipadm_password | default('NOT SET') }}
+
+          This usually means the password generation play didn't run or failed.
+          Make sure the first play (Generate IDM passwords) completed successfully.
+      when: >
+        ipa_pw == "ENTER_SOME_PW" or
+        ipaadmin_password is not defined or
+        ipadm_password is not defined or
+        ipaadmin_password == "" or
+        ipadm_password == ""
+      run_once: true  # noqa: run-once
+
+    - name: Include install-idm role
+      ansible.builtin.include_role:
+        name: install-idm

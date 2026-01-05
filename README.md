@@ -8,7 +8,7 @@
 
 Modern application development demands agility, scalability, and consistent environments across diverse cloud platforms. Organizations increasingly turn to container orchestration solutions like OpenShift to standardize and streamline the deployment of cloud-native applications. Yet, setting up secure, fully integrated OpenShift environments remains a complex and time-consuming process, especially when working with different sovereign clouds or hyperscaler infrastructures.
 
-Teams often encounter significant challenges, including the complexity of provisioning OpenShift clusters, which requires multiple manual steps, cloud-specific configurations, and specialized infrastructure expertise. Integrating clusters with Identity Management systems and establishing secure user access is another critical, yet error-prone, task. Ensuring that every developer receives a standardized set of DevOps tools and workflows across environments is difficult to achieve manually, often leading to inconsistencies and delays. 
+Teams often encounter significant challenges, including the complexity of provisioning OpenShift clusters, which requires multiple manual steps, cloud-specific configurations, and specialized infrastructure expertise. Integrating clusters with Identity Management systems and establishing secure user access is another critical, yet error-prone, task. Ensuring that every developer receives a standardized set of DevOps tools and workflows across environments is difficult to achieve manually, often leading to inconsistencies and delays.
 
 Additionally, new users frequently face obstacles when onboarding, as they struggle with inconsistent environments or missing resources, which slows down the development process and reduces productivity.
 To overcome these obstacles, organizations need an automated, self-service solution capable of provisioning OpenShift clusters, integrating them with essential tools and identity systems, and delivering isolated, ready-to-use development environments at scale.
@@ -72,7 +72,6 @@ Execution of pattern also involves importing of newly deployed cluster into RHAC
 
 <img width="2000" height="1125" alt="image" src="https://github.com/user-attachments/assets/4463797f-f1e5-44d9-a621-d6e85f8a91ae" />
 
-
 ## Key Concepts
 
 This section describes a set of key concepts essential for creating validated pattern. This material provides you with foundational knowledge to get familiar with the validated patterns framework. The content offers a clear and structured starting point, helping you understand and effectively apply these concepts in your projects.
@@ -110,6 +109,7 @@ sample/
 * The values.yaml file contains default values for the chart.
 
 #### ArgoCD and Helm Integration
+
 ArgoCD integrates with Helm to provide a powerful GitOps-based deployment mechanism. The validated patterns framework uses ArgoCD and Helm to streamline application deployment by defining applications as Helm charts stored in Git repositories. ArgoCD is the tool of choice to apply the desired state of desired application to the target cluster environment.
 
 ArgoCD automates the deployment and synchronization of these applications to OpenShift Container Platform clusters, ensuring consistency, reliability, and efficiency in managing Kubernetes applications. This integration supports automated, declarative, and version-controlled deployments, enhancing operational efficiency and maintaining application state across environments. ArgoCD helps implement continuous deployment for cloud-native applications.
@@ -127,23 +127,25 @@ Key characteristics of values files include:
 A common practice is to use a base values file, such as values-global.yaml, for global settings, and then have cluster-specific values files for example values-cluster1.yaml, values-cluster2.yaml that override or add to the global settings. This approach allows for comprehensive customization while maintaining a centralized and organized configuration structure, promoting best practices for deployment and resource management.
 
 #### Applications
+
+
 The applications section in the Helm values file plays a crucial role in defining and managing the deployment of various applications within an OpenShift Container Platform cluster. By leveraging Helm charts and adhering to validated patterns, it ensures consistency, best practices, and simplified management, leading to reliable and scalable application deployments.
 
 The path field in each application entry points in the values file points to the location of the Helm chart and associated configuration files. These charts contain the Kubernetes manifests and configuration necessary to deploy the application. Helm charts are used to package Kubernetes applications and manage their deployment in a consistent and reproducible manner.
 
 When these applications are deployed, the following Kubernetes resources are typically created:
 
-  * Deployments: Define the desired state and replicas for the application’s pods.
+* Deployments: Define the desired state and replicas for the application’s pods.
 
-  * Services: Expose the application’s pods to other services or external traffic.
+* Services: Expose the application’s pods to other services or external traffic.
 
-  * ConfigMaps and Secrets: Store configuration data and sensitive information.
+* ConfigMaps and Secrets: Store configuration data and sensitive information.
 
-  * PersistentVolumeClaims (PVCs): Request storage resources for the application.
+* PersistentVolumeClaims (PVCs): Request storage resources for the application.
 
-  * Ingress or Routes: Provide external access to the application.
+* Ingress or Routes: Provide external access to the application.
 
-  * RBAC (Role-Based Access Control): Define access permissions and roles.
+* RBAC (Role-Based Access Control): Define access permissions and roles.
 
 #### Red Hat Advanced Cluster Management (RHACM)
 
@@ -194,6 +196,7 @@ Shared values files are a powerful mechanism in a validated pattern, enabling ce
 ### Logging in to the Ansible Automation Platform
 
 The default login user for the AAP interface is admin, and the password is randomly generated during installation. This password is required to access the interface.
+
 #### Logging in using a secret retrieved from the OpenShift Console
 
 Follow these steps to log in to the Ansible Automation Platform using the OpenShift console:
@@ -281,9 +284,7 @@ For connected environments:
 2. Access to GitHub repositories
 
 #### Sizing of Hub cluster
-
 ##### Table 1. Hub cluster minimum requirements
-
 
 <img width="551" height="225" alt="image" src="https://github.com/user-attachments/assets/354621c7-8c12-4c91-aa86-4e248ba23d84" />
 

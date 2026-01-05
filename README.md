@@ -128,7 +128,6 @@ A common practice is to use a base values file, such as values-global.yaml, for 
 
 #### Applications
 
-
 The applications section in the Helm values file plays a crucial role in defining and managing the deployment of various applications within an OpenShift Container Platform cluster. By leveraging Helm charts and adhering to validated patterns, it ensures consistency, best practices, and simplified management, leading to reliable and scalable application deployments.
 
 The path field in each application entry points in the values file points to the location of the Helm chart and associated configuration files. These charts contain the Kubernetes manifests and configuration necessary to deploy the application. Helm charts are used to package Kubernetes applications and manage their deployment in a consistent and reproducible manner.
@@ -284,6 +283,7 @@ For connected environments:
 2. Access to GitHub repositories
 
 #### Sizing of Hub cluster
+
 ##### Table 1. Hub cluster minimum requirements
 
 <img width="551" height="225" alt="image" src="https://github.com/user-attachments/assets/354621c7-8c12-4c91-aa86-4e248ba23d84" />

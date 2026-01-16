@@ -49,21 +49,25 @@ clusterGroup:
       chart: golang-external-secrets
       chartVersion: 0.1.*
     aap-config:
+      disabled: true
       name: aap-config
       namespace: ansible-automation-platform
       argoProject: hub
       path: charts/hub/aap-config
     hive:
+      disabled: true
       name: hive-clusters
       namespace: hive
       project: infrastructure
       path: charts/all/infrastructure/hiveClusters
     group-sync:
+      diabled: true
       name: group-sync-config
       namespace: group-sync-operator
       project: infrastructure
       path: charts/all/infrastructure/group-sync
     ldap-oauth:
+      diabled: true
       name: ldap-oauth
       namespace: openshift-config
       project: infrastructure

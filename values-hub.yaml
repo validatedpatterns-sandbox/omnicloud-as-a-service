@@ -61,13 +61,13 @@ clusterGroup:
       project: infrastructure
       path: charts/all/infrastructure/hiveClusters
     group-sync:
-      diabled: true
+      disabled: true
       name: group-sync-config
       namespace: group-sync-operator
       project: infrastructure
       path: charts/all/infrastructure/group-sync
     ldap-oauth:
-      diabled: true
+      disabled: true
       name: ldap-oauth
       namespace: openshift-config
       project: infrastructure

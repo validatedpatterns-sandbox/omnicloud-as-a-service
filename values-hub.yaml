@@ -12,7 +12,7 @@ clusterGroup:
     acm:
       name: advanced-cluster-management
       namespace: open-cluster-management
-      channel: release-2.14
+      channel: release-2.15
     aap-operator:
       name: ansible-automation-platform-operator
       namespace: ansible-automation-platform

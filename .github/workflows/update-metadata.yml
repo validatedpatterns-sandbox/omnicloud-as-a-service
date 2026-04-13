@@ -20,3 +20,5 @@ jobs:
       id-token: write
     secrets:
       METADATA_SYNC_PRIVATE_KEY: ${{ secrets.METADATA_SYNC_PRIVATE_KEY }}
+    with:
+      METADATA_SYNC_APP_ID: ${{ vars.METADATA_SYNC_APP_ID }}

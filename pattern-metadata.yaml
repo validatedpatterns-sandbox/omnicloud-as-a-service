@@ -10,8 +10,8 @@ issues_url: https://github.com/validatedpatterns-sandbox/omnicloud-as-a-service/
 docs_url: https://validatedpatterns.io/patterns/omnicloud/
 ci_url: https://validatedpatterns.io/ci/?pattern=omnicloud
 # can be sandbox, tested or maintained
-tier: maintained
-owners: mbaldessari, darkdoc
+tier: sandbox
+owners: darkdoc
 requirements:
   hub: # Main cluster
     compute:

@@ -87,7 +87,7 @@ Two options are available that allow you to manage the lifecycle of Kubernetes a
 2. #### Helm
 
    Helm is a package manager for Kubernetes, which simplifies the process of defining, installing, and upgrading complex Kubernetes applications. Instead of ad-hoc patching of YAML files, Helm uses a templating language where variables are defined in the raw YAML and combined with actual values at runtime. This allows for the use of conditionals to adapt configurations to different environments and loops to dynamically create multiple instances consistently, such as generating a list of 12 namespaces. It manages Kubernetes manifests using a packaging format called Charts.
-  
+
   Helm’s templating capabilities, flexibility in handling variables, and advanced features such as conditionals and loops makes it the preferred mechanism for deploying applications in the validated patterns framework. It streamlines the configuration process, reduces complexity, and enhances maintainability, providing a robust solution for managing Kubernetes deployments.
 
 #### Helm in validated patterns
@@ -226,7 +226,7 @@ branch: main
 
 ### OCaaS Workflow deep dive
 
-This pattern is currenty tested on AWS, Azure & GCP environment running with Red Hat OpenShift cluster version 4.19. The codebase utilizes the following languages and tools: Shell, Python, Makefile, and Docker
+This pattern is currently tested on AWS, Azure & GCP environment running with Red Hat OpenShift cluster version 4.19. The codebase utilizes the following languages and tools: Shell, Python, Makefile, and Docker
 
 <img width="1902" height="835" alt="image" src="https://github.com/user-attachments/assets/c0c508d7-562a-4212-98b1-545499c859cc" />
 
@@ -374,7 +374,7 @@ openshift-gitops             omnicloud-as-a-service-hub  Synced        Healthy
 
 * A `managedCluster` resource is created via Ansible to start the importing of the cluster into RHACM
 
-* A secret called `auto-import-secret` is created in the `$CLUSTER_NAME` namespace from the `kubeconfig` secret which is auto-generated after the creationg of the `clusterDeployment` resource - RHACM needs this to import the cluster
+* A secret called `auto-import-secret` is created in the `$CLUSTER_NAME` namespace from the `kubeconfig` secret which is auto-generated after the creation of the `clusterDeployment` resource - RHACM needs this to import the cluster
 
 * The `clusterGroup=devops` label tells RHACM to apply the gitops policies from the pattern and when then provisioning is complete will roll out each of the resources declared in the `values-devops.yaml` values file in the root of the git repository.
 

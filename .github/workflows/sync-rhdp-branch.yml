@@ -1,5 +1,5 @@
 # This is a job to be run in the validatedpatterns organization only.
-# It tries to keep the rhdp-deploy branch uptodate by creating a PR from main
+# It tries to keep the rhdp-deploy branch up-to-date by creating a PR from main
 ---
 name: Sync main to rhdp-deploy
 on:

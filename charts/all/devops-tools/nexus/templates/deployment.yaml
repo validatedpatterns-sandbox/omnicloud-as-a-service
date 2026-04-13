@@ -35,7 +35,7 @@ spec:
       {{- with .Values.initContainers }}
         - name: {{ .name }}
           image: {{ .image }}
-          commmand: [ "/bin/sh","-c" ]
+          command: [ "/bin/sh","-c" ]
           args: [ "chown -R 200:200 /nexus-data" ]
       {{- with $.Values.securityContext }}
           securityContext:
@@ -50,7 +50,7 @@ spec:
               memory: "{{ .limits.memory }}"
           volumeMounts:
             - name: data-vol
-              mountPath: /nexus-data 
+              mountPath: /nexus-data
       {{- end }}
       {{- end }}
       containers:
